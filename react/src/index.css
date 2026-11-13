@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+/* the builders fill their pane */
+.builder-pane { height: calc(100vh - 7.5rem); min-height: 560px; }
