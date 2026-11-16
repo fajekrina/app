@@ -31,9 +31,19 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return json as T
 }
 
+/// which builder a role may open (the backend enforces the same split on every read)
+export const TEMPLATE_ROLES: readonly Role[] = ['SDUI_TEMPLATE_ADMIN', 'SDUI_TEMPLATE_PUBLISHER', 'SDUI_VIEWER']
+export const CONTENT_ROLES: readonly Role[] = ['SDUI_AUTHOR', 'SDUI_PUBLISHER', 'SDUI_VIEWER']
+
 export const studio = {
   current: () => me,
   has: (role: Role) => !!me?.roles.includes(role),
+  /// Template Builder: template admin / checker, viewer
+  canTemplates: () => TEMPLATE_ROLES.some((r) => me?.roles.includes(r)),
+  /// Screen Builder: content maker / checker, viewer
+  canScreens: () => CONTENT_ROLES.some((r) => me?.roles.includes(r)),
+  /// the first page this session may open
+  home: () => (CONTENT_ROLES.some((r) => me?.roles.includes(r)) ? '/studio/screens' : '/studio/templates'),
   async login(username: string, roles: Role[], merchants: string[]): Promise<Me> {
     me = await call<Me>('POST', '/login', { username, roles, merchants })
     return me

@@ -35,8 +35,8 @@ export function RequestsPanel(props: {
               <div className="mt-1 flex gap-2">
                 {props.canDecide && !own && <button disabled={busy === r.id} className="rounded bg-emerald-600 px-2 py-0.5 text-white" onClick={() => void act(r.id, 'approve')}>Setujui & terbitkan</button>}
                 {props.canDecide && !own && <button disabled={busy === r.id} className="rounded bg-red-50 px-2 py-0.5 text-red-700" onClick={() => void act(r.id, 'reject')}>Tolak</button>}
-                {own && <button disabled={busy === r.id} className="rounded bg-slate-100 px-2 py-0.5" onClick={() => void act(r.id, 'withdraw')}>Tarik</button>}
-                {own && props.canDecide && <span className="text-xs text-slate-400">maker-checker: orang lain yang menyetujui</span>}
+                {own && <button disabled={busy === r.id} className="rounded bg-slate-100 px-2 py-0.5" onClick={() => void act(r.id, 'withdraw')}>Tarik pengajuan</button>}
+                {(own || !props.canDecide) && <span className="text-xs text-slate-400">menunggu persetujuan checker</span>}
               </div>
             </li>
           )

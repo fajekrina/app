@@ -5,6 +5,10 @@ import StudioLoginPage from './pages/StudioLoginPage'
 import TemplatesPage from './pages/TemplatesPage'
 import ScreensPage from './pages/ScreensPage'
 import { DEFAULT_SCREEN } from './sdui/config'
+import { studio } from './api/studio'
+
+/// `/studio` → the first builder the roles may open
+function StudioHome() { return <Navigate to={studio.home()} replace /> }
 
 // HLD Target web §4.3: one generic SDUI route; the Studio has a page per builder.
 export const router = createBrowserRouter([
@@ -15,7 +19,7 @@ export const router = createBrowserRouter([
     path: '/studio',
     element: <StudioLayout />,
     children: [
-      { index: true, element: <Navigate to="screens" replace /> },
+      { index: true, element: <StudioHome /> },
       { path: 'templates', element: <TemplatesPage /> },
       { path: 'templates/:key', element: <TemplatesPage /> },
       { path: 'screens', element: <ScreensPage /> },

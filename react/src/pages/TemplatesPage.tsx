@@ -8,6 +8,7 @@ import { EditorDocument, SduiTemplateBuilder } from '@fajekrina/sdui-r/builder/r
 import { studio, type RequestRow, type TemplateDetail, type TemplateRow } from '../api/studio'
 import { CATALOG, SAMPLE_DATA, assetURL } from '../sdui/config'
 import { RequestsPanel } from '../components/RequestsPanel'
+import { Sidebar } from '../components/Sidebar'
 
 export default function TemplatesPage() {
   const { key } = useParams()
@@ -46,16 +47,16 @@ export default function TemplatesPage() {
   }
 
   return (
-    <div className="grid grid-cols-[260px_1fr] gap-3 p-3">
-      <aside className="space-y-3">
+    <div className="grid grid-cols-[auto_1fr] gap-3 p-3">
+      <Sidebar>
         <section className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
           <h3 className="mb-2 font-semibold">Template</h3>
           <ul className="space-y-1">
             {rows.map((t) => (
               <li key={t.key}>
                 <button className={`w-full rounded px-2 py-1 text-left ${t.key === key ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50'}`} onClick={() => navigate(`/studio/templates/${t.key}`)}>
-                  <div className="font-mono">{t.key}</div>
-                  <div className="text-xs text-slate-500">{t.title ?? '—'} · {t.activeVersion ? `v${t.activeVersion}` : 'belum terbit'}{t.pending ? ' · menunggu review' : ''}</div>
+                  <div className="truncate font-mono" title={t.key}>{t.key}</div>
+                  <div className="truncate text-xs text-slate-500">{t.title ?? '—'} · {t.activeVersion ? `v${t.activeVersion}` : 'belum terbit'}{t.pending ? ' · menunggu review' : ''}</div>
                 </button>
               </li>
             ))}
@@ -70,7 +71,7 @@ export default function TemplatesPage() {
         <RequestsPanel title="Pengajuan template" rows={requests} me={studio.current()!.sub} canDecide={studio.has('SDUI_TEMPLATE_PUBLISHER')}
           onDecide={async (id, d, reason) => { await studio.decideTemplate(id, d, reason); await reload(); if (key) setDetail(await studio.template(key)) }} />
         {error && <p className="text-sm text-red-600">{error}</p>}
-      </aside>
+      </Sidebar>
       <main className="builder-pane overflow-hidden rounded-lg border border-slate-200 bg-white">
         {!key && <p className="p-6 text-slate-400">Pilih template, atau buat yang baru. Output Template Builder adalah template: komponen dengan id dan order.</p>}
         {document && (

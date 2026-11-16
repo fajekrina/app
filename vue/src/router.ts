@@ -26,7 +26,7 @@ export const router = createRouter({
       path: '/studio',
       component: StudioLayout,
       children: [
-        { path: '', redirect: '/studio/screens' },
+        { path: '', component: { render: () => null } },   // StudioLayout sends it to the role's builder
         { path: 'templates/:key?', component: TemplatesPage },
         { path: 'screens/:merchantId?/:key?', component: ScreensPage }
       ]

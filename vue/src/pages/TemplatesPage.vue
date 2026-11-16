@@ -9,6 +9,7 @@ import { EditorDocument, SduiTemplateBuilder } from '@fajekrina/sdui-r/builder/v
 import { studio, type RequestRow, type TemplateDetail, type TemplateRow } from '../api/studio'
 import { CATALOG, SAMPLE_DATA, assetURL } from '../sdui/config'
 import RequestsPanel from '../components/RequestsPanel.vue'
+import StudioSidebar from '../components/StudioSidebar.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -62,14 +63,14 @@ function create() {
 </script>
 
 <template>
-  <div class="d-grid gap-3 p-3" style="grid-template-columns: 260px 1fr">
-    <aside class="d-flex flex-column gap-3">
+  <div class="d-grid gap-3 p-3" style="grid-template-columns: auto 1fr">
+    <StudioSidebar>
       <section class="card card-body p-3 small">
         <h3 class="h6">Template</h3>
         <div class="list-group list-group-flush">
           <button v-for="t in rows" :key="t.key" class="list-group-item list-group-item-action" :class="{ active: t.key === key }" @click="router.push(`/studio/templates/${t.key}`)">
-            <div class="font-monospace">{{ t.key }}</div>
-            <small>{{ t.title ?? '—' }} · {{ t.activeVersion ? `v${t.activeVersion}` : 'belum terbit' }}{{ t.pending ? ' · menunggu review' : '' }}</small>
+            <div class="font-monospace text-truncate" :title="t.key">{{ t.key }}</div>
+            <small class="d-block text-truncate">{{ t.title ?? '—' }} · {{ t.activeVersion ? `v${t.activeVersion}` : 'belum terbit' }}{{ t.pending ? ' · menunggu review' : '' }}</small>
           </button>
         </div>
         <form v-if="canEdit" class="input-group input-group-sm mt-3" @submit.prevent="create">
@@ -79,7 +80,7 @@ function create() {
       </section>
       <RequestsPanel title="Pengajuan template" :rows="requests" :me="me" :can-decide="studio.has('SDUI_TEMPLATE_PUBLISHER')" :on-decide="decide" />
       <p v-if="error" class="text-danger small">{{ error }}</p>
-    </aside>
+    </StudioSidebar>
     <main class="builder-pane overflow-hidden card">
       <p v-if="!key" class="p-4 text-secondary">Pilih template, atau buat yang baru. Output Template Builder adalah template: komponen dengan id dan order.</p>
       <SduiTemplateBuilder

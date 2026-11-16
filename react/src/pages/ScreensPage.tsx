@@ -7,15 +7,22 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { SduiScreenBuilder, ValuesEditor, type TemplateChoice } from '@fajekrina/sdui-r/builder/react'
 import { TemplateDocument } from '@fajekrina/sdui-r'
 import { studio, type CatalogEntry, type RequestRow, type ScreenDetail, type ScreenRow } from '../api/studio'
-import { CATALOG, MERCHANTS, SAMPLE_DATA, assetURL } from '../sdui/config'
+import { CATALOG, SAMPLE_DATA, assetURL } from '../sdui/config'
 import { RequestsPanel } from '../components/RequestsPanel'
+import { Sidebar } from '../components/Sidebar'
 
 export default function ScreensPage() {
   const params = useParams()
   const navigate = useNavigate()
-  const allowed = studio.current()!.merchants
-  const merchants = MERCHANTS.filter((m) => allowed.includes('*') || allowed.includes(m))
-  const merchantId = params.merchantId ?? merchants[0] ?? 'merchant_demo'
+  // the maker IS the merchant (its own account); checkers and viewers pick any merchant
+  const maker = studio.has('SDUI_AUTHOR')
+  const own = maker ? studio.current()!.merchants[0] : undefined
+  const [merchants, setMerchants] = useState<string[]>(own ? [own] : [])
+  useEffect(() => {
+    if (own) return
+    void studio.merchants().then((list) => setMerchants(list.map((m) => m.merchantId))).catch((e: Error) => setError(e.message))
+  }, [own])
+  const merchantId = own ?? params.merchantId ?? merchants[0] ?? ''
   const key = params.key
   const [rows, setRows] = useState<ScreenRow[]>([])
   const [requests, setRequests] = useState<RequestRow[]>([])
@@ -27,6 +34,7 @@ export default function ScreensPage() {
   const canEdit = studio.has('SDUI_AUTHOR')
 
   const reload = useCallback(async () => {
+    if (!merchantId) return
     setRows(await studio.screens(merchantId))
     setRequests(await studio.screenRequests(merchantId, 'PENDING'))
   }, [merchantId])
@@ -37,7 +45,7 @@ export default function ScreensPage() {
   useEffect(() => {
     setDetail(undefined)
     setEditor(undefined)
-    if (!key) return
+    if (!key || !merchantId) return
     let alive = true
     ;(async () => {
       const d = await studio.screen(merchantId, key).catch(() => null)
@@ -59,20 +67,25 @@ export default function ScreensPage() {
   }
 
   return (
-    <div className="grid grid-cols-[260px_1fr] gap-3 p-3">
-      <aside className="space-y-3">
+    <div className="grid grid-cols-[auto_1fr] gap-3 p-3">
+      <Sidebar>
         <section className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
-          <label className="mb-2 flex items-center gap-2 font-semibold">Merchant
-            <select className="rounded border border-slate-300 px-1 font-normal" value={merchantId} onChange={(e) => navigate(`/studio/screens/${e.target.value}/${key ?? 'home'}`)}>
-              {merchants.map((m) => <option key={m}>{m}</option>)}
-            </select>
-          </label>
+          {own ? (
+            <div className="mb-2 font-semibold">Merchant <code className="ml-1 rounded bg-slate-100 px-1 font-normal">{own}</code></div>
+          ) : (
+            <label className="mb-2 flex items-center gap-2 font-semibold">Merchant
+              <select className="rounded border border-slate-300 px-1 font-normal" value={merchantId} onChange={(e) => navigate(`/studio/screens/${e.target.value}`)}>
+                {merchants.map((m) => <option key={m}>{m}</option>)}
+              </select>
+            </label>
+          )}
+          {own && rows.length === 0 && <p className="mb-2 text-xs text-slate-500">Belum ada screen. Buat screen baru, lalu pilih template yang sudah disetujui.</p>}
           <ul className="space-y-1">
             {rows.map((s) => (
               <li key={s.key}>
                 <button className={`w-full rounded px-2 py-1 text-left ${s.key === key ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50'}`} onClick={() => navigate(`/studio/screens/${merchantId}/${s.key}`)}>
-                  <div className="font-mono">{s.key}</div>
-                  <div className="text-xs text-slate-500">{s.templateKey}@{s.templateVersion} · {s.activeSequence ? `v${s.activeSequence}` : 'belum terbit'}{s.pending ? ' · menunggu review' : ''}</div>
+                  <div className="truncate font-mono" title={s.key}>{s.key}</div>
+                  <div className="truncate text-xs text-slate-500" title={`${s.templateKey}@${s.templateVersion}`}>{s.templateKey}@{s.templateVersion} · {s.activeSequence ? `v${s.activeSequence}` : 'belum terbit'}{s.pending ? ' · menunggu review' : ''}</div>
                 </button>
               </li>
             ))}
@@ -87,7 +100,7 @@ export default function ScreensPage() {
         <RequestsPanel title={`Pengajuan · ${merchantId}`} rows={requests} me={studio.current()!.sub} canDecide={studio.has('SDUI_PUBLISHER')}
           onDecide={async (id, d, reason) => { await studio.decideScreen(merchantId, id, d, reason); await reload(); if (key) setDetail(await studio.screen(merchantId, key)) }} />
         {error && <p className="text-sm text-red-600">{error}</p>}
-      </aside>
+      </Sidebar>
       <main className="builder-pane overflow-hidden rounded-lg border border-slate-200 bg-white">
         {!key && <p className="p-6 text-slate-400">Pilih screen, atau buat yang baru. Di Screen Builder pilihannya template; Anda mengisi value komponennya.</p>}
         {editor && (

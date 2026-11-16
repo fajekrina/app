@@ -8,14 +8,17 @@ import { useRoute, useRouter } from 'vue-router'
 import { SduiScreenBuilder, ValuesEditor, type TemplateChoice } from '@fajekrina/sdui-r/builder/vue'
 import { TemplateDocument } from '@fajekrina/sdui-r'
 import { studio, type CatalogEntry, type RequestRow, type ScreenDetail, type ScreenRow } from '../api/studio'
-import { CATALOG, MERCHANTS, SAMPLE_DATA, assetURL } from '../sdui/config'
+import { CATALOG, SAMPLE_DATA, assetURL } from '../sdui/config'
 import RequestsPanel from '../components/RequestsPanel.vue'
+import StudioSidebar from '../components/StudioSidebar.vue'
 
 const route = useRoute()
 const router = useRouter()
-const allowed = studio.current()!.merchants
-const merchants = MERCHANTS.filter((m) => allowed.includes('*') || allowed.includes(m))
-const merchantId = computed(() => (route.params.merchantId ? String(route.params.merchantId) : merchants[0] ?? 'merchant_demo'))
+// the maker IS the merchant (its own account); checkers and viewers pick any merchant
+const own = studio.has('SDUI_AUTHOR') ? studio.current()!.merchants[0] : undefined
+const merchants = ref<string[]>(own ? [own] : [])
+if (!own) studio.merchants().then((list) => { merchants.value = list.map((m) => m.merchantId) }).catch((e: Error) => { error.value = e.message })
+const merchantId = computed(() => own ?? (route.params.merchantId ? String(route.params.merchantId) : merchants.value[0] ?? ''))
 const key = computed(() => (route.params.key ? String(route.params.key) : undefined))
 const rows = ref<ScreenRow[]>([])
 const requests = ref<RequestRow[]>([])
@@ -29,6 +32,7 @@ const me = studio.current()!.sub
 const templates = computed<TemplateChoice[]>(() => catalog.value.map((c) => ({ key: c.key, version: c.version, title: c.title })))
 
 async function reload() {
+  if (!merchantId.value) return
   rows.value = await studio.screens(merchantId.value)
   requests.value = await studio.screenRequests(merchantId.value, 'PENDING')
 }
@@ -39,7 +43,7 @@ studio.catalog().then((c) => { catalog.value = c }).catch((e: Error) => { error.
 watch([merchantId, key], async ([mid, k]) => {
   detail.value = undefined
   editor.value = undefined
-  if (!k) return
+  if (!k || !mid) return
   try {
     const d = await studio.screen(mid, k).catch(() => null)
     const values = d?.draft ?? d?.active?.payload
@@ -73,18 +77,20 @@ const loadTemplate = (c: TemplateChoice) => studio.releasedTemplate(c.key, c.ver
 </script>
 
 <template>
-  <div class="d-grid gap-3 p-3" style="grid-template-columns: 260px 1fr">
-    <aside class="d-flex flex-column gap-3">
+  <div class="d-grid gap-3 p-3" style="grid-template-columns: auto 1fr">
+    <StudioSidebar>
       <section class="card card-body p-3 small">
-        <label class="d-flex align-items-center gap-2 fw-semibold mb-2">Merchant
-          <select class="form-select form-select-sm" :value="merchantId" @change="router.push(`/studio/screens/${($event.target as HTMLSelectElement).value}/${key ?? 'home'}`)">
+        <div v-if="own" class="fw-semibold mb-2">Merchant <code class="ms-1">{{ own }}</code></div>
+        <label v-else class="d-flex align-items-center gap-2 fw-semibold mb-2">Merchant
+          <select class="form-select form-select-sm" :value="merchantId" @change="router.push(`/studio/screens/${($event.target as HTMLSelectElement).value}`)">
             <option v-for="m in merchants" :key="m">{{ m }}</option>
           </select>
         </label>
+        <p v-if="own && rows.length === 0" class="text-secondary mb-2">Belum ada screen. Buat screen baru, lalu pilih template yang sudah disetujui.</p>
         <div class="list-group list-group-flush">
           <button v-for="s in rows" :key="s.key" class="list-group-item list-group-item-action" :class="{ active: s.key === key }" @click="router.push(`/studio/screens/${merchantId}/${s.key}`)">
-            <div class="font-monospace">{{ s.key }}</div>
-            <small>{{ s.templateKey }}@{{ s.templateVersion }} · {{ s.activeSequence ? `v${s.activeSequence}` : 'belum terbit' }}{{ s.pending ? ' · menunggu review' : '' }}</small>
+            <div class="font-monospace text-truncate" :title="s.key">{{ s.key }}</div>
+            <small class="d-block text-truncate" :title="`${s.templateKey}@${s.templateVersion}`">{{ s.templateKey }}@{{ s.templateVersion }} · {{ s.activeSequence ? `v${s.activeSequence}` : 'belum terbit' }}{{ s.pending ? ' · menunggu review' : '' }}</small>
           </button>
         </div>
         <form v-if="canEdit" class="input-group input-group-sm mt-3" @submit.prevent="create">
@@ -94,7 +100,7 @@ const loadTemplate = (c: TemplateChoice) => studio.releasedTemplate(c.key, c.ver
       </section>
       <RequestsPanel :title="`Pengajuan · ${merchantId}`" :rows="requests" :me="me" :can-decide="studio.has('SDUI_PUBLISHER')" :on-decide="decide" />
       <p v-if="error" class="text-danger small">{{ error }}</p>
-    </aside>
+    </StudioSidebar>
     <main class="builder-pane overflow-hidden card">
       <p v-if="!key" class="p-4 text-secondary">Pilih screen, atau buat yang baru. Di Screen Builder pilihannya template; Anda mengisi value komponennya.</p>
       <SduiScreenBuilder

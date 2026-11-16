@@ -1,27 +1,31 @@
 <script setup lang="ts">
-/** Dev stand-in for the workforce SSO: a name and the roles to hold. */
-import { ref } from 'vue'
+/**
+ * Dev stand-in for the workforce SSO: a name and ONE role. The maker IS the merchant — its
+ * name is its merchant id; checkers and viewers see every merchant. One role per login keeps
+ * maker and checker apart: approving needs another account.
+ */
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ROLES, studio, type Role } from '../api/studio'
-import { MERCHANTS } from '../sdui/config'
 
-const LABELS: Record<Role, string> = {
-  SDUI_TEMPLATE_ADMIN: 'Admin template (Template Builder)',
-  SDUI_TEMPLATE_PUBLISHER: 'Checker template',
-  SDUI_AUTHOR: 'Maker konten (Screen Builder)',
-  SDUI_PUBLISHER: 'Checker konten',
-  SDUI_VIEWER: 'Viewer'
+const LABELS: Record<Role, [string, string]> = {
+  SDUI_TEMPLATE_ADMIN: ['Admin template', 'membuat dan mengajukan template (Template Builder)'],
+  SDUI_TEMPLATE_PUBLISHER: ['Checker template', 'menyetujui / menolak pengajuan template'],
+  SDUI_AUTHOR: ['Maker (merchant)', 'menyusun screen merchant-nya dari template yang disetujui (Screen Builder)'],
+  SDUI_PUBLISHER: ['Checker konten', 'menyetujui / menolak pengajuan screen semua merchant'],
+  SDUI_VIEWER: ['Viewer', 'hanya melihat template dan screen']
 }
 const router = useRouter()
-const username = ref('ana')
-const roles = ref<Role[]>(['SDUI_AUTHOR'])
-const merchants = ref<string[]>([...MERCHANTS])
+const username = ref('')
+const role = ref<Role>()
 const error = ref<string>()
+const maker = computed(() => role.value === 'SDUI_AUTHOR')
 
 async function submit() {
+  if (!role.value) { error.value = 'Pilih peran'; return }
   try {
-    const me = await studio.login(username.value, roles.value, merchants.value)
-    await router.push(me.roles.some((r) => r.startsWith('SDUI_TEMPLATE')) ? '/studio/templates' : '/studio/screens')
+    await studio.login(username.value.trim(), [role.value], [])
+    await router.push(studio.home())
   } catch (e) {
     error.value = (e as Error).message
   }
@@ -30,28 +34,22 @@ async function submit() {
 
 <template>
   <div class="min-vh-100 d-flex align-items-center justify-content-center bg-light">
-    <form class="card p-4 shadow-sm" style="width: 28rem" @submit.prevent="submit">
+    <form class="card p-4 shadow-sm" style="width: 32rem" @submit.prevent="submit">
       <h1 class="h5">sdui-r Studio — login (dev)</h1>
-      <label class="form-label mt-2">Nama pengguna
-        <input v-model="username" class="form-control" />
-      </label>
       <fieldset class="mt-2">
         <legend class="fs-6 fw-semibold">Peran</legend>
         <div v-for="r in ROLES" :key="r" class="form-check">
-          <input :id="r" v-model="roles" class="form-check-input" type="checkbox" :value="r" />
-          <label class="form-check-label" :for="r">{{ LABELS[r] }} <code class="small">{{ r }}</code></label>
+          <input :id="r" v-model="role" class="form-check-input" type="radio" name="role" :value="r" />
+          <label class="form-check-label" :for="r"><strong>{{ LABELS[r][0] }}</strong> <span class="text-secondary">— {{ LABELS[r][1] }}</span></label>
         </div>
+        <p class="text-secondary small mb-0">Satu akun satu peran. Untuk menyetujui pengajuan, login sebagai akun lain dengan peran checker.</p>
       </fieldset>
-      <fieldset class="mt-2">
-        <legend class="fs-6 fw-semibold">Merchant</legend>
-        <div v-for="m in MERCHANTS" :key="m" class="form-check">
-          <input :id="m" v-model="merchants" class="form-check-input" type="checkbox" :value="m" />
-          <label class="form-check-label" :for="m">{{ m }}</label>
-        </div>
-      </fieldset>
+      <label class="form-label mt-3">{{ maker ? 'Nama merchant' : 'Nama pengguna' }}
+        <input v-model="username" required :pattern="maker ? '[A-Za-z][A-Za-z0-9_]{1,63}' : '[A-Za-z][A-Za-z0-9._\\-]{1,63}'" class="form-control font-monospace" :placeholder="maker ? 'mis. toko_baru' : 'mis. tia, tono'" />
+        <span v-if="maker" class="form-text">Maker adalah merchant: nama ini menjadi ID merchant (huruf, angka, _). Merchant contoh yang sudah berisi screen: <code>merchant_demo</code>, <code>merchant_promo</code>.</span>
+      </label>
       <p v-if="error" class="text-danger small mt-2">{{ error }}</p>
       <button class="btn btn-primary mt-3">Masuk</button>
-      <p class="text-secondary small mt-2 mb-0">Maker-checker: pengaju tidak bisa menyetujui perubahannya sendiri — login sebagai pengguna lain untuk menyetujui.</p>
     </form>
   </div>
 </template>

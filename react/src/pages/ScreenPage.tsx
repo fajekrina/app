@@ -56,7 +56,7 @@ export default function ScreenPage() {
           merchant
           <select className="rounded border border-slate-300 px-1 py-0.5" value={merchant}
             onChange={(e) => navigate(`/s/${screen}${toQuery(e.target.value, seed)}`)}>
-            {MERCHANTS.map((m) => <option key={m}>{m}</option>)}
+            {[...new Set([...MERCHANTS, merchant])].map((m) => <option key={m}>{m}</option>)}
           </select>
         </label>
         {!online && <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">Anda sedang offline — tampilan terakhir yang terverifikasi</span>}

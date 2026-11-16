@@ -54,7 +54,7 @@ const switchMerchant = (event: Event) => void router.push({ path: `/s/${screen.v
       <span class="badge text-bg-light font-monospace">{{ merchant }} / {{ screen }}</span>
       <label class="d-flex align-items-center gap-1 text-secondary">merchant
         <select class="form-select form-select-sm" :value="merchant" @change="switchMerchant">
-          <option v-for="m in MERCHANTS" :key="m">{{ m }}</option>
+          <option v-for="m in [...new Set([...MERCHANTS, merchant])]" :key="m">{{ m }}</option>
         </select>
       </label>
       <span v-if="!online" class="badge text-bg-warning">Anda sedang offline — tampilan terakhir yang terverifikasi</span>

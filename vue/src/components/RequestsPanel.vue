@@ -35,10 +35,8 @@ async function act(id: number, decision: 'approve' | 'reject' | 'withdraw') {
             <button class="btn btn-sm btn-success" :disabled="busy === r.id" @click="act(r.id, 'approve')">Setujui &amp; terbitkan</button>
             <button class="btn btn-sm btn-outline-danger" :disabled="busy === r.id" @click="act(r.id, 'reject')">Tolak</button>
           </template>
-          <template v-if="r.requestedBy === me">
-            <button class="btn btn-sm btn-light" :disabled="busy === r.id" @click="act(r.id, 'withdraw')">Tarik</button>
-            <span v-if="canDecide" class="text-secondary">maker-checker: orang lain yang menyetujui</span>
-          </template>
+          <button v-if="r.requestedBy === me" class="btn btn-sm btn-light" :disabled="busy === r.id" @click="act(r.id, 'withdraw')">Tarik pengajuan</button>
+          <span v-if="r.requestedBy === me || !canDecide" class="text-secondary">menunggu persetujuan checker</span>
         </div>
       </li>
     </ul>
