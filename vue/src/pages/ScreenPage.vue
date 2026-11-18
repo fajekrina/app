@@ -1,28 +1,29 @@
 <script setup lang="ts">
 /**
- * The customer app: `/s/:screen?m=<merchant>&…` — a signed template + value set, composed
- * by the engine. Query params (except `m`) seed the screen (`{{seatId}}`).
+ * The customer app: `/s/:merchantId/:screen?…` — one merchant's published page: a signed
+ * template + value set, composed by the engine. Query params seed the screen (`{{seatId}}`).
+ * The old `/s/:screen?m=<merchant>` links redirect here (router).
  */
 import { computed, shallowRef, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { SduiScreen } from '@fajekrina/sdui-r/vue'
 import type { SduiEngine, SduiProps } from '@fajekrina/sdui-r'
 import { createSduiEngine } from '../sdui/engine'
-import { DEFAULT_MERCHANT, MERCHANTS } from '../sdui/config'
+import { MERCHANTS, isMerchantId, screenPath } from '../sdui/config'
 import { session } from '../api/bff'
 
 const route = useRoute()
 const router = useRouter()
 const screen = computed(() => String(route.params.screen))
-const merchant = computed(() => (typeof route.query.m === 'string' ? route.query.m : DEFAULT_MERCHANT))
-const seed = computed(() => Object.fromEntries(Object.entries(route.query).filter(([k, v]) => k !== 'm' && typeof v === 'string')) as Record<string, string>)
+const merchant = computed(() => String(route.params.merchantId))
+const valid = computed(() => isMerchantId(merchant.value))
+const seed = computed(() => Object.fromEntries(Object.entries(route.query).filter(([, v]) => typeof v === 'string')) as Record<string, string>)
 const engine = shallowRef<SduiEngine>()
 const online = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
 const error = ref<string>()
 
-function query(m: string, params: SduiProps): Record<string, string> {
+function query(params: SduiProps): Record<string, string> {
   const q: Record<string, string> = {}
-  if (m !== DEFAULT_MERCHANT) q.m = m
   for (const [k, v] of Object.entries(params)) if (v !== null && typeof v !== 'object') q[k] = String(v)
   return q
 }
@@ -30,11 +31,12 @@ function query(m: string, params: SduiProps): Record<string, string> {
 watch(merchant, async (m) => {
   engine.value = undefined
   error.value = undefined
+  if (!isMerchantId(m)) return
   void session().catch(() => undefined)   // guest session + CSRF for api actions
   try {
     const created = await createSduiEngine({
       merchantId: m,
-      navigate: (key, params) => void router.push({ path: `/s/${key}`, query: query(m, params) }),
+      navigate: (key, params) => void router.push({ path: screenPath(m, key), query: query(params) }),
       onEvent: (e) => { if (e.type === 'connectivity_changed') online.value = e.online }
     })
     await created.refreshManifest().catch((e) => console.warn('[sdui-r] manifest', e))
@@ -44,7 +46,7 @@ watch(merchant, async (m) => {
   }
 }, { immediate: true })
 
-const switchMerchant = (event: Event) => void router.push({ path: `/s/${screen.value}`, query: query((event.target as HTMLSelectElement).value, seed.value) })
+const switchMerchant = (event: Event) => void router.push({ path: screenPath((event.target as HTMLSelectElement).value, screen.value), query: seed.value })
 </script>
 
 <template>
@@ -61,9 +63,10 @@ const switchMerchant = (event: Event) => void router.push({ path: `/s/${screen.v
       <RouterLink to="/studio" class="ms-auto">Studio →</RouterLink>
     </nav>
     <main class="container" style="max-width: 64rem">
+      <p v-if="!valid" class="text-danger p-4">ID merchant tidak valid: <code>{{ merchant }}</code></p>
       <p v-if="error" class="text-danger p-4">{{ error }}</p>
       <SduiScreen v-if="engine" :key="`${merchant}/${screen}`" :engine="engine" :source="{ key: screen }" :seed="seed" />
-      <p v-else-if="!error" class="text-secondary p-4">Memuat…</p>
+      <p v-else-if="valid && !error" class="text-secondary p-4">Memuat…</p>
     </main>
   </div>
 </template>

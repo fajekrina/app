@@ -14,9 +14,23 @@ export const MERCHANTS = ['merchant_demo', 'merchant_promo'] as const
 export const DEFAULT_MERCHANT = 'merchant_demo'
 export const DEFAULT_SCREEN = 'home'
 
-/** `api.request` names → web-bff endpoints */
+/**
+ * Chart data sources (`chart.source`): named data summaries from summary-service (dummy),
+ * through web-bff. Each answers `{ title, unit, items: [{ key, label, value }] }` — the shape
+ * a chart maps by default, so a maker only picks one. Name → [web-bff path, title].
+ */
+export const DATA_SOURCES: Record<string, [path: string, title: string]> = {
+  salesSummary: ['/summaries/sales', 'Penjualan tiket per bulan'],
+  cancellationSummary: ['/summaries/cancellations', 'Pembatalan per bulan'],
+  refundSummary: ['/summaries/refunds', 'Refund per bulan'],
+  paymentMethodSummary: ['/summaries/paymentMethods', 'Metode pembayaran'],
+  ticketCategorySummary: ['/summaries/ticketCategories', 'Penjualan per kategori tiket']
+}
+
+/** `api.request` names → web-bff endpoints (domain requests and the data summaries) */
 export const ENDPOINTS: Record<string, Endpoint> = {
-  submitCheckout: { method: 'POST', path: '/submitCheckout' }
+  submitCheckout: { method: 'POST', path: '/submitCheckout' },
+  ...Object.fromEntries(Object.entries(DATA_SOURCES).map(([name, [path]]) => [name, { method: 'GET', path } satisfies Endpoint]))
 }
 
 /** `openURL.link` names → https URLs */
@@ -34,24 +48,64 @@ export const ASSETS: Record<string, string> = {
   placeholder: 'https://picsum.photos/seed/placeholder/600/400'
 }
 
-/** Unknown names resolve to nothing (the engine never loads an arbitrary host). */
+/** an uploaded picture (value-service asset), named in `image.name` */
+export const ASSET_ID = /^img_[0-9a-f]{32}$/
+
+/**
+ * Bundle names map to their URL; uploaded pictures (`img_…`) to web-bff, which serves them once
+ * their release is approved. Unknown names resolve to nothing (the engine never loads an
+ * arbitrary host).
+ */
 export function assetURL(name: string): string {
+  if (ASSET_ID.test(name)) return `/bff/assets/${name}`
   return ASSETS[name] ?? ''
 }
 
-/** names the builders offer (the same allow-lists) */
+/** the Studio preview: a merchant's uploaded pictures, drafts included (studio-bff) */
+export function studioAssetURL(merchantId: string): (name: string) => string {
+  return (name) => ASSET_ID.test(name) ? `/studio-bff/merchants/${encodeURIComponent(merchantId)}/assets/${name}` : assetURL(name)
+}
+
+/**
+ * names the builders offer (the same allow-lists). `screens` = the templates (set by the Studio
+ * pages); `requests` = what an `api` action of a button (or a form) sends; `sources` = what a
+ * chart reads. Both stay `ENDPOINTS` names (one engine allow-list), the builder just offers
+ * each where it belongs.
+ */
 export const CATALOG = {
-  screens: ['home', 'seatSelection', 'checkout'],
-  requests: Object.keys(ENDPOINTS),
+  screens: [] as string[],
+  requests: Object.keys(ENDPOINTS).filter((name) => !(name in DATA_SOURCES)),
+  sources: Object.keys(DATA_SOURCES),
   links: Object.keys(LINKS),
   commands: [] as string[],
   assets: Object.keys(ASSETS)
 }
 
-/** sample data for `{{tokens}}` in the builder preview */
-export const SAMPLE_DATA = { seatId: 'A1', eventId: 'event-jazz-01', user: { name: 'Ada' } }
+/** a made-up summary for the builder preview of a chart source */
+const sample = (keys: Array<[string, string]>) => ({ items: keys.map(([key, label], i) => ({ key, label, value: [120, 80, 150, 60, 110, 95][i % 6]! })) })
+const MONTHS: Array<[string, string]> = [['jan', 'Januari'], ['feb', 'Februari'], ['mar', 'Maret'], ['apr', 'April'], ['mei', 'Mei'], ['jun', 'Juni']]
+
+/** sample data for `{{tokens}}` and chart sources in the builder preview (the app fetches the real ones) */
+export const SAMPLE_DATA = {
+  seatId: 'A1', eventId: 'event-jazz-01', user: { name: 'Ada' },
+  salesSummary: sample(MONTHS),
+  cancellationSummary: sample(MONTHS),
+  refundSummary: sample(MONTHS),
+  paymentMethodSummary: sample([['va', 'Virtual account'], ['card', 'Kartu kredit'], ['ewallet', 'E-wallet'], ['qris', 'QRIS']]),
+  ticketCategorySummary: sample([['vip', 'VIP'], ['festival', 'Festival'], ['tribune', 'Tribun']])
+}
 
 /** screen keys are identifiers: old kebab-case links (`seat-selection`) → `seatSelection` */
 export function specScreenKey(key: string): string {
   return key.replace(/-+([A-Za-z0-9])/g, (_, c: string) => c.toUpperCase()).replace(/-/g, '')
+}
+
+/** merchant ids are identifiers (they appear in delivery URLs) */
+export function isMerchantId(id: string): boolean {
+  return /^[A-Za-z][A-Za-z0-9_]{1,63}$/.test(id)
+}
+
+/** the customer app's address of a merchant's page: `/s/<merchant>/<screen>` */
+export function screenPath(merchantId: string, screen: string): string {
+  return `/s/${encodeURIComponent(merchantId)}/${encodeURIComponent(screen)}`
 }

@@ -12,7 +12,7 @@ Rujukannya HLD Target Aplikasi Web; desainnya ada di `../DESAIN-SDUI-R.md`.
 
 | Rute | Isi |
 | --- | --- |
-| `/s/:screen?m=<merchant>` | App nasabah. Template + value set bertanda tangan diambil dari `/bff/sdui` (web-bff → delivery-service) lalu disusun oleh engine. Ada manifest, cache IndexedDB terenkripsi, dan banner offline. Aksi `api` dikirim ke `/bff/api/*` dengan CSRF |
+| `/s/:merchantId/:screen` | App nasabah: halaman terbit satu merchant, mis. `/s/merchant_demo/home`. Query lain menjadi data layar (`?seatId=A1`). Link lama `/s/:screen?m=<merchant>` dialihkan ke sini. Template + value set bertanda tangan diambil dari `/bff/sdui` (web-bff → delivery-service) lalu disusun oleh engine. Ada manifest, cache IndexedDB terenkripsi, dan banner offline. Aksi `api` dikirim ke `/bff/api/*` dengan CSRF |
 | `/studio/login` | Login dev ke studio-bff: nama, peran, merchant |
 | `/studio/templates[/:key]` | **Template Builder** (admin, `SDUI_TEMPLATE_ADMIN`). Palette berisi komponen; hasilnya template (id + order). Pengajuan disetujui `SDUI_TEMPLATE_PUBLISHER` |
 | `/studio/screens[/:merchant/:key]` | **Screen Builder** (maker, `SDUI_AUTHOR`). Palette berisi template; maker mengisi value per komponen. Hasilnya value set, yang disetujui `SDUI_PUBLISHER` |

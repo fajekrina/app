@@ -6,12 +6,30 @@ export const ROLES = ['SDUI_TEMPLATE_ADMIN', 'SDUI_TEMPLATE_PUBLISHER', 'SDUI_AU
 export type Role = typeof ROLES[number]
 
 export interface Me { sub: string; name: string; roles: Role[]; merchants: string[]; csrf: string }
-export interface TemplateRow { key: string; title?: string; status: string; activeVersion?: number; lockVersion: number; pending: number }
+/** a deprecated template starts no new page; pages that use it keep working */
+export interface Deprecation { deprecated?: boolean; deprecationReason?: string | null; replacedBy?: string | null; deprecatedBy?: string | null; deprecatedAt?: string | null }
+export interface TemplateRow extends Deprecation { key: string; title?: string; status: string; activeVersion?: number; lockVersion: number; pending: number }
 export interface TemplateDetail extends TemplateRow { draft: unknown | null; active: { version: number; payload: object } | null; releases: { version: number }[] }
 export interface ScreenRow { key: string; templateKey: string; templateVersion: number; status: string; activeSequence?: number; lockVersion: number; pending: number }
 export interface ScreenDetail extends ScreenRow { draft: unknown | null; active: { sequence: number; payload: object } | null }
 export interface RequestRow { id: number; key: string; status: string; note?: string; requestedBy: string; decidedBy?: string; reason?: string; revision: number }
-export interface CatalogEntry { key: string; version: number; title?: string }
+export interface CatalogEntry extends Deprecation { key: string; version: number; title?: string }
+/** an uploaded picture: `name` goes into `image.name` */
+export interface AssetRow { name: string; contentType: string; size: number; source: 'UPLOAD' | 'URL'; sourceUrl?: string; originalName?: string; publishedAt?: string | null }
+
+/** the builder's view of a deprecation (`null` = in use) */
+export function deprecationOf(row: Deprecation | null | undefined): { reason?: string; replacedBy?: string; by?: string; at?: string } | null {
+  if (!row?.deprecated) return null
+  return { reason: row.deprecationReason ?? undefined, replacedBy: row.replacedBy ?? undefined, by: row.deprecatedBy ?? undefined, at: row.deprecatedAt ?? undefined }
+}
+
+/** a file as base64 (no data: prefix) */
+async function base64(file: Blob): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return btoa(binary)
+}
 
 export class StudioError extends Error {
   constructor(readonly status: number, message: string) { super(message) }
@@ -63,9 +81,14 @@ export const studio = {
   templateRequests: (status?: string) => call<RequestRow[]>('GET', `/template-requests${status ? `?status=${status}` : ''}`),
   decideTemplate: (id: number, decision: 'approve' | 'reject' | 'withdraw', reason?: string) =>
     call<unknown>('POST', `/template-requests/${id}/${decision}`, decision === 'reject' ? { reason } : undefined),
+  /** no new pages from it; existing pages keep working (template admin) */
+  deprecateTemplate: (key: string, reason: string, replacedBy?: string) => call<TemplateDetail>('PUT', `/templates/${key}/deprecation`, { reason, replacedBy }),
+  restoreTemplate: (key: string) => call<TemplateDetail>('DELETE', `/templates/${key}/deprecation`),
 
   catalog: () => call<CatalogEntry[]>('GET', '/catalog/templates'),
   releasedTemplate: (key: string, version: number) => call<unknown>('GET', `/catalog/templates/${key}/v${version}`),
+  /** every given release of a template (the Template Builder never reuses their component ids) */
+  releasedTemplates: (key: string, versions: number[]) => Promise.all(versions.map((v) => call<unknown>('GET', `/catalog/templates/${key}/v${v}`))),
 
   merchants: () => call<{ merchantId: string; name: string }[]>('GET', '/merchants'),
   screens: (mid: string) => call<ScreenRow[]>('GET', `/merchants/${mid}/screens`),
@@ -74,5 +97,13 @@ export const studio = {
   submitScreen: (mid: string, key: string, note: string) => call<RequestRow>('POST', `/merchants/${mid}/screens/${key}/requests`, { note }),
   screenRequests: (mid: string, status?: string) => call<RequestRow[]>('GET', `/merchants/${mid}/requests${status ? `?status=${status}` : ''}`),
   decideScreen: (mid: string, id: number, decision: 'approve' | 'reject' | 'withdraw', reason?: string) =>
-    call<unknown>('POST', `/merchants/${mid}/requests/${id}/${decision}`, decision === 'reject' ? { reason } : undefined)
+    call<unknown>('POST', `/merchants/${mid}/requests/${id}/${decision}`, decision === 'reject' ? { reason } : undefined),
+
+  /** pictures of a merchant (value-service keeps the bytes; a value set only names them) */
+  assets: (mid: string) => call<AssetRow[]>('GET', `/merchants/${mid}/assets`),
+  /** a picked / dropped file, or a link the backend copies once; answers the asset name */
+  async uploadAsset(mid: string, source: { file: Blob & { name?: string } } | { url: string }): Promise<string> {
+    const body = 'url' in source ? { url: source.url } : { filename: source.file.name ?? 'picture', data: await base64(source.file) }
+    return (await call<AssetRow>('POST', `/merchants/${mid}/assets`, body)).name
+  }
 }

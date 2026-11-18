@@ -6,7 +6,7 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { EditorDocument, SduiTemplateBuilder } from '@fajekrina/sdui-r/builder/vue'
-import { studio, type RequestRow, type TemplateDetail, type TemplateRow } from '../api/studio'
+import { deprecationOf, studio, type RequestRow, type TemplateDetail, type TemplateRow } from '../api/studio'
 import { CATALOG, SAMPLE_DATA, assetURL } from '../sdui/config'
 import RequestsPanel from '../components/RequestsPanel.vue'
 import StudioSidebar from '../components/StudioSidebar.vue'
@@ -15,6 +15,9 @@ const route = useRoute()
 const router = useRouter()
 const key = computed(() => (route.params.key ? String(route.params.key) : undefined))
 const rows = ref<TemplateRow[]>([])
+// a navigate goes to a page, and a page IS a template: offer every template key
+// deprecated templates are marked in the page picker (and are no replacement)
+const catalog = computed(() => ({ ...CATALOG, screens: [...new Set([...rows.value.map((t) => t.key), ...(key.value ? [key.value] : [])])].sort(), deprecated: rows.value.filter((t) => t.deprecated).map((t) => t.key) }))
 const requests = ref<RequestRow[]>([])
 const detail = ref<TemplateDetail | null>()
 const document = shallowRef<EditorDocument>()
@@ -35,8 +38,12 @@ watch(key, async (k) => {
   document.value = undefined
   if (!k) return
   const d = await studio.template(k).catch(() => null)   // null: a new template
+  // every released version: their component ids are never generated again
+  let released: unknown[]
+  try { released = d ? await studio.releasedTemplates(k, d.releases.map((x) => x.version)) : [] } catch (e) { if (k === key.value) error.value = (e as Error).message; return }
   if (k !== key.value) return
   const doc = new EditorDocument({ mode: 'template', key: k })
+  for (const t of released) doc.reserveIds(t as object)
   const source = d?.draft ?? d?.active?.payload
   if (source) doc.importJSON(source as object)
   detail.value = d
@@ -57,6 +64,15 @@ async function decide(id: number, d: 'approve' | 'reject' | 'withdraw', reason?:
   await reload()
   if (key.value) detail.value = await studio.template(key.value)
 }
+const deprecation = computed(() => deprecationOf(detail.value))
+async function deprecate(info: { reason: string; replacedBy?: string }) {
+  detail.value = await studio.deprecateTemplate(key.value!, info.reason, info.replacedBy)
+  await reload()
+}
+async function restore() {
+  detail.value = await studio.restoreTemplate(key.value!)
+  await reload()
+}
 function create() {
   if (/^[A-Za-z][A-Za-z0-9_]*$/.test(newKey.value)) void router.push(`/studio/templates/${newKey.value}`)
 }
@@ -71,6 +87,7 @@ function create() {
           <button v-for="t in rows" :key="t.key" class="list-group-item list-group-item-action" :class="{ active: t.key === key }" @click="router.push(`/studio/templates/${t.key}`)">
             <div class="font-monospace text-truncate" :title="t.key">{{ t.key }}</div>
             <small class="d-block text-truncate">{{ t.title ?? '—' }} · {{ t.activeVersion ? `v${t.activeVersion}` : 'belum terbit' }}{{ t.pending ? ' · menunggu review' : '' }}</small>
+            <span v-if="t.deprecated" class="badge rounded-pill text-bg-warning" :title="t.deprecationReason ?? undefined">deprecated{{ t.replacedBy ? ` → ${t.replacedBy}` : '' }}</span>
           </button>
         </div>
         <form v-if="canEdit" class="input-group input-group-sm mt-3" @submit.prevent="create">
@@ -82,19 +99,22 @@ function create() {
       <p v-if="error" class="text-danger small">{{ error }}</p>
     </StudioSidebar>
     <main class="builder-pane overflow-hidden card">
-      <p v-if="!key" class="p-4 text-secondary">Pilih template, atau buat yang baru. Output Template Builder adalah template: komponen dengan id dan order.</p>
+      <p v-if="!key" class="p-4 text-secondary">Pilih template, atau buat yang baru.</p>
       <SduiTemplateBuilder
         v-if="document"
         :key="key"
         :document="document"
         :title="detail?.activeVersion ? `aktif v${detail.activeVersion}` : 'baru'"
-        :catalog="CATALOG"
+        :catalog="catalog"
         :sample-data="SAMPLE_DATA"
         :asset-u-r-l="assetURL"
         :read-only="!canEdit"
         :baseline="detail?.active?.payload"
         :on-save="canEdit ? save : undefined"
         :on-submit-for-review="canEdit ? submit : undefined"
+        :deprecation="deprecation"
+        :on-deprecate="canEdit && detail?.activeVersion ? deprecate : undefined"
+        :on-restore="canEdit ? restore : undefined"
       />
     </main>
   </div>

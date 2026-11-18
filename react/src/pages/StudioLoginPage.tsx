@@ -2,6 +2,7 @@
  * Dev stand-in for the workforce SSO (HLD Target §4.2): a name and ONE role.
  * The maker IS the merchant — its name is its merchant id; checkers and viewers see every
  * merchant. One role per login keeps maker and checker apart: approving needs another account.
+ * A viewer only reads, so it signs in without a name.
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -21,12 +22,13 @@ export default function StudioLoginPage() {
   const [role, setRole] = useState<Role>()
   const [error, setError] = useState<string>()
   const maker = role === 'SDUI_AUTHOR'
+  const viewer = role === 'SDUI_VIEWER'
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!role) { setError('Pilih peran'); return }
     try {
-      await studio.login(username.trim(), [role], [])
+      await studio.login(viewer ? '' : username.trim(), [role], [])
       navigate(studio.home())
     } catch (err) {
       setError((err as Error).message)
@@ -47,11 +49,11 @@ export default function StudioLoginPage() {
           ))}
           <p className="text-xs text-slate-500">Satu akun satu peran. Untuk menyetujui pengajuan, login sebagai akun lain dengan peran checker.</p>
         </fieldset>
-        <label className="block text-sm">{maker ? 'Nama merchant' : 'Nama pengguna'}
+        {role && !viewer && <label className="block text-sm">{maker ? 'Nama merchant' : 'Nama pengguna'}
           <input required pattern={maker ? '[A-Za-z][A-Za-z0-9_]{1,63}' : '[A-Za-z][A-Za-z0-9._\\-]{1,63}'} className="mt-1 w-full rounded border border-slate-300 px-2 py-1 font-mono"
             placeholder={maker ? 'mis. toko_baru' : 'mis. tia, tono'} value={username} onChange={(e) => setUsername(e.target.value)} />
-          {maker && <span className="text-xs text-slate-500">Maker adalah merchant: nama ini menjadi ID merchant (huruf, angka, _). Merchant contoh yang sudah berisi screen: <code>merchant_demo</code>, <code>merchant_promo</code>.</span>}
-        </label>
+          {maker && <span className="text-xs text-slate-500">Merchant contoh yang sudah berisi screen: <code>merchant_demo</code>, <code>merchant_promo</code>.</span>}
+        </label>}
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button className="w-full rounded bg-indigo-600 py-2 text-white hover:bg-indigo-700">Masuk</button>
       </form>

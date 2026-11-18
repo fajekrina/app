@@ -44,7 +44,11 @@ export async function createSduiEngine(options: EngineOptions): Promise<SduiEngi
     // dev: the AES key lives for the tab; target: a non-extractable per-device key in IndexedDB
     cache: new SduiCache({ store: options.store ?? indexedDbStore(`sdui-r-${options.merchantId}`), cipher: options.cipher ?? aesGcmCipher(await generateAesKey()) }),
     actionDispatcher: new ActionDispatcher({
-      network: fetchNetworkClient({ baseUrl: API_BASE, endpoints: ENDPOINTS, credentials: 'same-origin', getHeaders: csrfHeaders, fetchImpl: options.fetchImpl }),
+      // the page's merchant travels with every request (its chart data summaries are per merchant)
+      network: fetchNetworkClient({
+        baseUrl: API_BASE, endpoints: ENDPOINTS, credentials: 'same-origin', fetchImpl: options.fetchImpl,
+        getHeaders: async (o) => ({ ...(await csrfHeaders(o)), 'X-Sdui-Merchant': options.merchantId })
+      }),
       navigator: browserNavigator({ navigate: (screen, params) => options.navigate(screen, params), links: LINKS })
     }),
     connectivity: typeof window === 'undefined' ? undefined : connectivity(),

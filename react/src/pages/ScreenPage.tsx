@@ -1,51 +1,63 @@
 /**
- * The customer app: `/s/:screen?m=<merchant>&…` — a signed template + value set, composed
- * by the engine. Query params (except `m`) seed the screen (`{{seatId}}`).
+ * The customer app: `/s/:merchantId/:screen?…` — one merchant's published page: a signed
+ * template + value set, composed by the engine. Query params seed the screen (`{{seatId}}`).
+ * The old `/s/:screen?m=<merchant>` links redirect here (`LegacyScreenRedirect`).
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { SduiScreen } from '@fajekrina/sdui-r/react'
 import type { SduiEngine, SduiProps } from '@fajekrina/sdui-r'
 import { createSduiEngine } from '../sdui/engine'
-import { DEFAULT_MERCHANT, DEFAULT_SCREEN, MERCHANTS, specScreenKey } from '../sdui/config'
+import { DEFAULT_MERCHANT, DEFAULT_SCREEN, MERCHANTS, isMerchantId, screenPath, specScreenKey } from '../sdui/config'
 import { session } from '../api/bff'
 
-function toQuery(merchant: string, params: SduiProps): string {
+function toQuery(params: SduiProps): string {
   const qs = new URLSearchParams()
-  if (merchant !== DEFAULT_MERCHANT) qs.set('m', merchant)
   for (const [k, v] of Object.entries(params)) if (v !== null && typeof v !== 'object') qs.set(k, String(v))
   const s = qs.toString()
   return s ? `?${s}` : ''
 }
 
-export default function ScreenPage() {
+/** `/s/:screen?m=<merchant>&…` (old links) → `/s/<merchant>/<screen>?…` */
+export function LegacyScreenRedirect() {
   const { screen = DEFAULT_SCREEN } = useParams()
+  const { search } = useLocation()
+  const query = new URLSearchParams(search)
+  const merchant = query.get('m') ?? DEFAULT_MERCHANT
+  query.delete('m')
+  const rest = query.toString()
+  return <Navigate replace to={`${screenPath(merchant, specScreenKey(screen))}${rest ? `?${rest}` : ''}`} />
+}
+
+export default function ScreenPage() {
+  const { merchantId: merchant = DEFAULT_MERCHANT, screen = DEFAULT_SCREEN } = useParams()
   const navigate = useNavigate()
   const { search } = useLocation()
-  const query = useMemo(() => new URLSearchParams(search), [search])
-  const merchant = query.get('m') ?? DEFAULT_MERCHANT
-  const seed = useMemo(() => Object.fromEntries([...query].filter(([k]) => k !== 'm')), [query])
+  const seed = useMemo(() => Object.fromEntries(new URLSearchParams(search)), [search])
   const [engine, setEngine] = useState<SduiEngine>()
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
   const [error, setError] = useState<string>()
+  const valid = isMerchantId(merchant)
 
   useEffect(() => {
     let alive = true
     setEngine(undefined)
+    setError(undefined)
+    if (!valid) return
     void session().catch(() => undefined)   // guest session + CSRF for api actions
     createSduiEngine({
       merchantId: merchant,
-      navigate: (key, params) => navigate(`/s/${key}${toQuery(merchant, params)}`),
+      navigate: (key, params) => navigate(`${screenPath(merchant, key)}${toQuery(params)}`),
       onEvent: (e) => { if (e.type === 'connectivity_changed') setOnline(e.online) }
     }).then(async (created) => {
       await created.refreshManifest().catch((e) => console.warn('[sdui-r] manifest', e))
       if (alive) setEngine(created)
     }).catch((e: Error) => alive && setError(e.message))
     return () => { alive = false }
-  }, [merchant, navigate])
+  }, [merchant, navigate, valid])
 
   const key = specScreenKey(screen)
-  if (key !== screen) return <Navigate replace to={`/s/${key}${search}`} />
+  if (key !== screen) return <Navigate replace to={`${screenPath(merchant, key)}${search}`} />
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -55,7 +67,7 @@ export default function ScreenPage() {
         <label className="flex items-center gap-1 text-slate-500">
           merchant
           <select className="rounded border border-slate-300 px-1 py-0.5" value={merchant}
-            onChange={(e) => navigate(`/s/${screen}${toQuery(e.target.value, seed)}`)}>
+            onChange={(e) => navigate(`${screenPath(e.target.value, screen)}${toQuery(seed)}`)}>
             {[...new Set([...MERCHANTS, merchant])].map((m) => <option key={m}>{m}</option>)}
           </select>
         </label>
@@ -63,8 +75,9 @@ export default function ScreenPage() {
         <Link to="/studio" className="ml-auto text-indigo-600 hover:underline">Studio →</Link>
       </header>
       <main className="mx-auto max-w-5xl">
+        {!valid && <p className="p-6 text-red-600">ID merchant tidak valid: <code>{merchant}</code></p>}
         {error && <p className="p-6 text-red-600">{error}</p>}
-        {engine ? <SduiScreen key={`${merchant}/${key}`} engine={engine} source={{ key }} seed={seed} /> : !error && <p className="p-6 text-slate-400">Memuat…</p>}
+        {engine ? <SduiScreen key={`${merchant}/${key}`} engine={engine} source={{ key }} seed={seed} /> : valid && !error && <p className="p-6 text-slate-400">Memuat…</p>}
       </main>
     </div>
   )
