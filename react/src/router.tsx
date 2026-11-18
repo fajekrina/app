@@ -1,16 +1,18 @@
-import { Navigate, createBrowserRouter } from 'react-router-dom'
+import { Navigate, createBrowserRouter, useParams } from 'react-router-dom'
 import ScreenPage, { LegacyScreenRedirect } from './pages/ScreenPage'
 import StudioLayout from './pages/StudioLayout'
 import StudioLoginPage from './pages/StudioLoginPage'
 import TemplatesPage from './pages/TemplatesPage'
-import ScreensPage from './pages/ScreensPage'
 import { DEFAULT_MERCHANT, DEFAULT_SCREEN } from './sdui/config'
-import { studio } from './api/studio'
 
-/// `/studio` → the first builder the roles may open
-function StudioHome() { return <Navigate to={studio.home()} replace /> }
+/** old Screen Builder links: a page IS its template → its content tab */
+function LegacyScreensRedirect() {
+  const { key } = useParams()
+  return <Navigate to={key ? `/studio/templates/${key}/content` : '/studio/templates'} replace />
+}
 
-// HLD Target web §4.3: one generic SDUI route; the Studio has a page per builder.
+// HLD Target web §4.3: one generic SDUI route; the Studio is one page per template with a
+// design tab and a content tab (the admin fills the page's values there).
 export const router = createBrowserRouter([
   { path: '/', element: <Navigate to={`/s/${DEFAULT_MERCHANT}/${DEFAULT_SCREEN}`} replace /> },
   // a merchant's published page
@@ -22,15 +24,15 @@ export const router = createBrowserRouter([
     path: '/studio',
     element: <StudioLayout />,
     children: [
-      { index: true, element: <StudioHome /> },
+      { index: true, element: <Navigate to="/studio/templates" replace /> },
       { path: 'templates', element: <TemplatesPage /> },
       { path: 'templates/:key', element: <TemplatesPage /> },
-      { path: 'screens', element: <ScreensPage /> },
-      // a checker / viewer picks a merchant first (no screen yet)
-      { path: 'screens/:merchantId', element: <ScreensPage /> },
-      { path: 'screens/:merchantId/:key', element: <ScreensPage /> },
+      { path: 'templates/:key/:tab', element: <TemplatesPage /> },
+      { path: 'screens', element: <LegacyScreensRedirect /> },
+      { path: 'screens/:merchantId', element: <LegacyScreensRedirect /> },
+      { path: 'screens/:merchantId/:key', element: <LegacyScreensRedirect /> },
       // an unknown Studio address stays in the Studio (not the customer app)
-      { path: '*', element: <StudioHome /> }
+      { path: '*', element: <Navigate to="/studio/templates" replace /> }
     ]
   },
   { path: '*', element: <Navigate to="/" replace /> }

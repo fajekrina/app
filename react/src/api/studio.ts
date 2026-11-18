@@ -1,18 +1,20 @@
 /**
- * studio-bff client: a workforce session (dev login with roles), CSRF on every write, and
- * the relayed template-service / value-service APIs.
+ * studio-bff client: a workforce session (dev login), CSRF on every write, and the relayed
+ * template-service / value-service APIs.
+ *
+ * One Studio role — the template admin — and the admin IS the merchant: its login name is its
+ * merchant id. It owns that merchant's templates (no one else sees them) and fills that
+ * merchant's pages. Publishing is direct (no review step).
  */
-export const ROLES = ['SDUI_TEMPLATE_ADMIN', 'SDUI_TEMPLATE_PUBLISHER', 'SDUI_AUTHOR', 'SDUI_PUBLISHER', 'SDUI_VIEWER'] as const
-export type Role = typeof ROLES[number]
-
-export interface Me { sub: string; name: string; roles: Role[]; merchants: string[]; csrf: string }
+export interface Me { sub: string; name: string; roles: string[]; merchantId: string; csrf: string }
 /** a deprecated template starts no new page; pages that use it keep working */
 export interface Deprecation { deprecated?: boolean; deprecationReason?: string | null; replacedBy?: string | null; deprecatedBy?: string | null; deprecatedAt?: string | null }
-export interface TemplateRow extends Deprecation { key: string; title?: string; status: string; activeVersion?: number; lockVersion: number; pending: number }
-export interface TemplateDetail extends TemplateRow { draft: unknown | null; active: { version: number; payload: object } | null; releases: { version: number }[] }
-export interface ScreenRow { key: string; templateKey: string; templateVersion: number; status: string; activeSequence?: number; lockVersion: number; pending: number }
-export interface ScreenDetail extends ScreenRow { draft: unknown | null; active: { sequence: number; payload: object } | null }
-export interface RequestRow { id: number; key: string; status: string; note?: string; requestedBy: string; decidedBy?: string; reason?: string; revision: number }
+/** `unpublished`: the draft has changes that are not live yet */
+export interface TemplateRow extends Deprecation { key: string; title?: string; status: string; activeVersion?: number; lockVersion: number; unpublished: boolean }
+export interface Release { version: number; title?: string; publishedBy?: string; releasedAt?: string }
+export interface TemplateDetail extends TemplateRow { draft: unknown | null; active: { version: number; payload: object; publishedBy?: string } | null; releases: Release[] }
+export interface ScreenRow { key: string; templateKey: string; templateVersion: number; status: string; activeSequence?: number; lockVersion: number; unpublished: boolean }
+export interface ScreenDetail extends ScreenRow { draft: unknown | null; active: { sequence: number; payload: object; publishedBy?: string } | null }
 export interface CatalogEntry extends Deprecation { key: string; version: number; title?: string }
 /** an uploaded picture: `name` goes into `image.name` */
 export interface AssetRow { name: string; contentType: string; size: number; source: 'UPLOAD' | 'URL'; sourceUrl?: string; originalName?: string; publishedAt?: string | null }
@@ -49,21 +51,19 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return json as T
 }
 
-/// which builder a role may open (the backend enforces the same split on every read)
-export const TEMPLATE_ROLES: readonly Role[] = ['SDUI_TEMPLATE_ADMIN', 'SDUI_TEMPLATE_PUBLISHER', 'SDUI_VIEWER']
-export const CONTENT_ROLES: readonly Role[] = ['SDUI_AUTHOR', 'SDUI_PUBLISHER', 'SDUI_VIEWER']
+/** the merchant of the session (the admin's own), for a URL */
+const mid = () => {
+  if (!me) throw new StudioError(401, 'login required')
+  return encodeURIComponent(me.merchantId)
+}
 
 export const studio = {
   current: () => me,
-  has: (role: Role) => !!me?.roles.includes(role),
-  /// Template Builder: template admin / checker, viewer
-  canTemplates: () => TEMPLATE_ROLES.some((r) => me?.roles.includes(r)),
-  /// Screen Builder: content maker / checker, viewer
-  canScreens: () => CONTENT_ROLES.some((r) => me?.roles.includes(r)),
-  /// the first page this session may open
-  home: () => (CONTENT_ROLES.some((r) => me?.roles.includes(r)) ? '/studio/screens' : '/studio/templates'),
-  async login(username: string, roles: Role[], merchants: string[]): Promise<Me> {
-    me = await call<Me>('POST', '/login', { username, roles, merchants })
+  /** the admin's merchant id */
+  merchantId: () => me?.merchantId ?? '',
+  /** the dev login: the admin's name IS its merchant id */
+  async login(username: string): Promise<Me> {
+    me = await call<Me>('POST', '/login', { username })
     return me
   },
   async restore(): Promise<Me | undefined> {
@@ -74,36 +74,34 @@ export const studio = {
     try { await call('POST', '/logout') } finally { me = undefined }
   },
 
+  // the admin's own templates
   templates: () => call<TemplateRow[]>('GET', '/templates'),
   template: (key: string) => call<TemplateDetail>('GET', `/templates/${key}`),
   saveTemplate: (key: string, payload: unknown, lockVersion?: number) => call<TemplateDetail>('PUT', `/templates/${key}/draft`, { payload, lockVersion }),
-  submitTemplate: (key: string, note: string) => call<RequestRow>('POST', `/templates/${key}/requests`, { note }),
-  templateRequests: (status?: string) => call<RequestRow[]>('GET', `/template-requests${status ? `?status=${status}` : ''}`),
-  decideTemplate: (id: number, decision: 'approve' | 'reject' | 'withdraw', reason?: string) =>
-    call<unknown>('POST', `/template-requests/${id}/${decision}`, decision === 'reject' ? { reason } : undefined),
-  /** no new pages from it; existing pages keep working (template admin) */
+  /** publish the draft now (no review step); answers the template */
+  publishTemplate: (key: string) => call<TemplateDetail>('POST', `/templates/${key}/publish`),
+  /** no new pages from it; existing pages keep working */
   deprecateTemplate: (key: string, reason: string, replacedBy?: string) => call<TemplateDetail>('PUT', `/templates/${key}/deprecation`, { reason, replacedBy }),
   restoreTemplate: (key: string) => call<TemplateDetail>('DELETE', `/templates/${key}/deprecation`),
 
-  catalog: () => call<CatalogEntry[]>('GET', '/catalog/templates'),
-  releasedTemplate: (key: string, version: number) => call<unknown>('GET', `/catalog/templates/${key}/v${version}`),
+  /** the admin's released templates (latest of each key) */
+  catalog: () => call<CatalogEntry[]>('GET', `/catalog/templates/${mid()}`),
+  releasedTemplate: (key: string, version: number) => call<unknown>('GET', `/catalog/templates/${mid()}/${key}/v${version}`),
   /** every given release of a template (the Template Builder never reuses their component ids) */
-  releasedTemplates: (key: string, versions: number[]) => Promise.all(versions.map((v) => call<unknown>('GET', `/catalog/templates/${key}/v${v}`))),
+  releasedTemplates: (key: string, versions: number[]) => Promise.all(versions.map((v) => call<unknown>('GET', `/catalog/templates/${mid()}/${key}/v${v}`))),
 
-  merchants: () => call<{ merchantId: string; name: string }[]>('GET', '/merchants'),
-  screens: (mid: string) => call<ScreenRow[]>('GET', `/merchants/${mid}/screens`),
-  screen: (mid: string, key: string) => call<ScreenDetail>('GET', `/merchants/${mid}/screens/${key}`),
-  saveScreen: (mid: string, key: string, payload: unknown, lockVersion?: number) => call<ScreenDetail>('PUT', `/merchants/${mid}/screens/${key}/draft`, { payload, lockVersion }),
-  submitScreen: (mid: string, key: string, note: string) => call<RequestRow>('POST', `/merchants/${mid}/screens/${key}/requests`, { note }),
-  screenRequests: (mid: string, status?: string) => call<RequestRow[]>('GET', `/merchants/${mid}/requests${status ? `?status=${status}` : ''}`),
-  decideScreen: (mid: string, id: number, decision: 'approve' | 'reject' | 'withdraw', reason?: string) =>
-    call<unknown>('POST', `/merchants/${mid}/requests/${id}/${decision}`, decision === 'reject' ? { reason } : undefined),
+  // the admin's pages (a page IS its template: its key is the template key)
+  screens: () => call<ScreenRow[]>('GET', `/merchants/${mid()}/screens`),
+  screen: (key: string) => call<ScreenDetail>('GET', `/merchants/${mid()}/screens/${key}`),
+  saveScreen: (key: string, payload: unknown, lockVersion?: number) => call<ScreenDetail>('PUT', `/merchants/${mid()}/screens/${key}/draft`, { payload, lockVersion }),
+  /** publish the page's values now (no review step); answers the page */
+  publishScreen: (key: string) => call<ScreenDetail>('POST', `/merchants/${mid()}/screens/${key}/publish`),
 
-  /** pictures of a merchant (value-service keeps the bytes; a value set only names them) */
-  assets: (mid: string) => call<AssetRow[]>('GET', `/merchants/${mid}/assets`),
+  /** pictures of the merchant (value-service keeps the bytes; a value set only names them) */
+  assets: () => call<AssetRow[]>('GET', `/merchants/${mid()}/assets`),
   /** a picked / dropped file, or a link the backend copies once; answers the asset name */
-  async uploadAsset(mid: string, source: { file: Blob & { name?: string } } | { url: string }): Promise<string> {
+  async uploadAsset(source: { file: Blob & { name?: string } } | { url: string }): Promise<string> {
     const body = 'url' in source ? { url: source.url } : { filename: source.file.name ?? 'picture', data: await base64(source.file) }
-    return (await call<AssetRow>('POST', `/merchants/${mid}/assets`, body)).name
+    return (await call<AssetRow>('POST', `/merchants/${mid()}/assets`, body)).name
   }
 }

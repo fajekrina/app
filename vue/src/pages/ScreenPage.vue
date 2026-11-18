@@ -9,8 +9,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { SduiScreen } from '@fajekrina/sdui-r/vue'
 import type { SduiEngine, SduiProps } from '@fajekrina/sdui-r'
 import { createSduiEngine } from '../sdui/engine'
-import { MERCHANTS, isMerchantId, screenPath } from '../sdui/config'
-import { session } from '../api/bff'
+import { isMerchantId, screenPath } from '../sdui/config'
+import { publicMerchants, session, type PublicMerchant } from '../api/bff'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,6 +21,10 @@ const seed = computed(() => Object.fromEntries(Object.entries(route.query).filte
 const engine = shallowRef<SduiEngine>()
 const online = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
 const error = ref<string>()
+// every merchant with a published page (not a fixed list); the current one always stays
+const merchants = ref<PublicMerchant[]>([])
+publicMerchants().then((list) => { merchants.value = list }).catch((e) => console.warn('[sdui-r] merchants', e))
+const listed = computed(() => merchants.value.some((m) => m.merchantId === merchant.value))
 
 function query(params: SduiProps): Record<string, string> {
   const q: Record<string, string> = {}
@@ -56,7 +60,8 @@ const switchMerchant = (event: Event) => void router.push({ path: screenPath((ev
       <span class="badge text-bg-light font-monospace">{{ merchant }} / {{ screen }}</span>
       <label class="d-flex align-items-center gap-1 text-secondary">merchant
         <select class="form-select form-select-sm" :value="merchant" @change="switchMerchant">
-          <option v-for="m in [...new Set([...MERCHANTS, merchant])]" :key="m">{{ m }}</option>
+          <option v-if="!listed" :value="merchant">{{ merchant }}</option>
+          <option v-for="m in merchants" :key="m.merchantId" :value="m.merchantId">{{ m.name === m.merchantId ? m.merchantId : `${m.name} (${m.merchantId})` }}</option>
         </select>
       </label>
       <span v-if="!online" class="badge text-bg-warning">Anda sedang offline — tampilan terakhir yang terverifikasi</span>

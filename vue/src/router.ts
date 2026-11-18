@@ -3,10 +3,10 @@ import ScreenPage from './pages/ScreenPage.vue'
 import StudioLayout from './pages/StudioLayout.vue'
 import StudioLoginPage from './pages/StudioLoginPage.vue'
 import TemplatesPage from './pages/TemplatesPage.vue'
-import ScreensPage from './pages/ScreensPage.vue'
 import { DEFAULT_MERCHANT, DEFAULT_SCREEN, screenPath, specScreenKey } from './sdui/config'
 
-// HLD Target web §4.3: one generic SDUI route; the Studio has a page per builder.
+// HLD Target web §4.3: one generic SDUI route; the Studio is one page per template with a
+// design tab and a content tab (the admin fills the page's values there).
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -35,9 +35,12 @@ export const router = createRouter({
       path: '/studio',
       component: StudioLayout,
       children: [
-        { path: '', component: { render: () => null } },   // StudioLayout sends it to the role's builder
-        { path: 'templates/:key?', component: TemplatesPage },
-        { path: 'screens/:merchantId?/:key?', component: ScreensPage }
+        { path: '', redirect: '/studio/templates' },
+        { path: 'templates/:key?/:tab?', component: TemplatesPage },
+        // old Screen Builder links: a page IS its template → its content tab
+        { path: 'screens/:merchantId?/:key?', redirect: (to) => (to.params.key ? `/studio/templates/${String(to.params.key)}/content` : '/studio/templates') },
+        // an unknown Studio address stays in the Studio (not the customer app)
+        { path: ':pathMatch(.*)*', redirect: '/studio/templates' }
       ]
     },
     { path: '/:pathMatch(.*)*', redirect: '/' }

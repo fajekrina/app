@@ -16,6 +16,16 @@ export async function session(refresh = false): Promise<{ user: string; csrf: st
   return { user: user!, csrf: csrf! }
 }
 
+/** a merchant with a published page (the customer app's merchant switcher) */
+export interface PublicMerchant { merchantId: string; name: string }
+
+/** every merchant that has at least one published page (public, through web-bff → delivery) */
+export async function publicMerchants(): Promise<PublicMerchant[]> {
+  const res = await fetch('/bff/sdui/merchants', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(`merchants: HTTP ${res.status}`)
+  return (await res.json()) as PublicMerchant[]
+}
+
 /** headers for `fetchNetworkClient({ getHeaders })`: a 401 refreshes the session once */
 export async function csrfHeaders({ refresh }: { refresh: boolean }): Promise<Record<string, string>> {
   return { 'X-CSRF-Token': (await session(refresh)).csrf }

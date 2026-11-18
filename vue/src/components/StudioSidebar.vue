@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * The Studio's left panels (list + review requests), collapsible so the builder can use the
+ * The Studio's left panel (the template list), collapsible so the builder can use the
  * whole width. The choice is remembered per browser.
  */
 import { ref } from 'vue'

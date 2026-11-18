@@ -8,8 +8,8 @@ import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-route
 import { SduiScreen } from '@fajekrina/sdui-r/react'
 import type { SduiEngine, SduiProps } from '@fajekrina/sdui-r'
 import { createSduiEngine } from '../sdui/engine'
-import { DEFAULT_MERCHANT, DEFAULT_SCREEN, MERCHANTS, isMerchantId, screenPath, specScreenKey } from '../sdui/config'
-import { session } from '../api/bff'
+import { DEFAULT_MERCHANT, DEFAULT_SCREEN, isMerchantId, screenPath, specScreenKey } from '../sdui/config'
+import { publicMerchants, session, type PublicMerchant } from '../api/bff'
 
 function toQuery(params: SduiProps): string {
   const qs = new URLSearchParams()
@@ -37,6 +37,9 @@ export default function ScreenPage() {
   const [engine, setEngine] = useState<SduiEngine>()
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
   const [error, setError] = useState<string>()
+  // every merchant with a published page (not a fixed list); the current one always stays
+  const [merchants, setMerchants] = useState<PublicMerchant[]>([])
+  useEffect(() => { void publicMerchants().then(setMerchants).catch((e) => console.warn('[sdui-r] merchants', e)) }, [])
   const valid = isMerchantId(merchant)
 
   useEffect(() => {
@@ -68,7 +71,8 @@ export default function ScreenPage() {
           merchant
           <select className="rounded border border-slate-300 px-1 py-0.5" value={merchant}
             onChange={(e) => navigate(`${screenPath(e.target.value, screen)}${toQuery(seed)}`)}>
-            {[...new Set([...MERCHANTS, merchant])].map((m) => <option key={m}>{m}</option>)}
+            {!merchants.some((m) => m.merchantId === merchant) && <option value={merchant}>{merchant}</option>}
+            {merchants.map((m) => <option key={m.merchantId} value={m.merchantId}>{m.name === m.merchantId ? m.merchantId : `${m.name} (${m.merchantId})`}</option>)}
           </select>
         </label>
         {!online && <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">Anda sedang offline — tampilan terakhir yang terverifikasi</span>}

@@ -10,7 +10,7 @@ export const DELIVERY_BASE = '/bff/sdui'
 /** named domain requests, through web-bff */
 export const API_BASE = '/bff/api'
 
-export const MERCHANTS = ['merchant_demo', 'merchant_promo'] as const
+/** the page `/` opens; the merchant switcher lists every merchant with a published page (`publicMerchants`) */
 export const DEFAULT_MERCHANT = 'merchant_demo'
 export const DEFAULT_SCREEN = 'home'
 
@@ -53,7 +53,7 @@ export const ASSET_ID = /^img_[0-9a-f]{32}$/
 
 /**
  * Bundle names map to their URL; uploaded pictures (`img_…`) to web-bff, which serves them once
- * their release is approved. Unknown names resolve to nothing (the engine never loads an
+ * their release is published. Unknown names resolve to nothing (the engine never loads an
  * arbitrary host).
  */
 export function assetURL(name: string): string {
