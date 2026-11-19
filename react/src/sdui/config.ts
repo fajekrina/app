@@ -26,7 +26,9 @@ export const DATA_SOURCES: Record<string, [path: string, title: string]> = {
   paymentMethodSummary: ['/summaries/paymentMethods', 'Metode pembayaran'],
   ticketCategorySummary: ['/summaries/ticketCategories', 'Penjualan per kategori tiket'],
   // insightV2: also `peak` ({ label, value, amount }) and `note`, read by the page's texts as tokens
-  coffeeSpending: ['/summaries/coffeeSpending', 'Pembelian kopi per bulan (insight)']
+  coffeeSpending: ['/summaries/coffeeSpending', 'Pembelian kopi per bulan (insight)'],
+  // insightV3: a page `load` (not a chart): `nominal` ("15.000.000") and `amount` ("Rp15.000.000")
+  depositMaturity: ['/summaries/depositMaturity', 'Deposito yang baru cair (insight)']
 }
 
 /** `api.request` names → web-bff endpoints (domain requests and the data summaries) */
@@ -103,6 +105,11 @@ export const SAMPLE_DATA = {
     ],
     peak: { label: 'Apr 2025', value: 1300000, amount: 'Rp1.300.000' },
     note: 'Selama 3 bulan terakhir, pembelian kopi kamu meningkat terus.'
+  },
+  depositMaturity: {
+    items: [{ key: 'deposito', label: 'Deposito', value: 15000000 }],
+    nominal: '15.000.000',
+    amount: 'Rp15.000.000'
   }
 }
 
