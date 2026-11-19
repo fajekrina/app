@@ -2,3 +2,6 @@
 
 /* the builders fill their pane */
 .builder-pane { height: calc(100vh - 7.5rem); min-height: 560px; }
+/* the page header (2.5rem) sits above the builder, whose own min-height is 560px: without the
+   extra room its bottom (the JSON panel header, once collapsed) is clipped on short screens */
+main.builder-pane { min-height: calc(560px + 2.5rem); }

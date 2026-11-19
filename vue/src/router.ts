@@ -5,8 +5,8 @@ import StudioLoginPage from './pages/StudioLoginPage.vue'
 import TemplatesPage from './pages/TemplatesPage.vue'
 import { DEFAULT_MERCHANT, DEFAULT_SCREEN, screenPath, specScreenKey } from './sdui/config'
 
-// HLD Target web §4.3: one generic SDUI route; the Studio is one page per template with a
-// design tab and a content tab (the admin fills the page's values there).
+// HLD Target web §4.3: one generic SDUI route; the Studio is one page per template: one editor
+// for its design and content, one Terbitkan.
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -36,9 +36,10 @@ export const router = createRouter({
       component: StudioLayout,
       children: [
         { path: '', redirect: '/studio/templates' },
-        { path: 'templates/:key?/:tab?', component: TemplatesPage },
-        // old Screen Builder links: a page IS its template → its content tab
-        { path: 'screens/:merchantId?/:key?', redirect: (to) => (to.params.key ? `/studio/templates/${String(to.params.key)}/content` : '/studio/templates') },
+        { path: 'templates/:key?', component: TemplatesPage },
+        // old links (the former content tab, the Screen Builder): a page IS its template → its editor
+        { path: 'templates/:key/:tab', redirect: (to) => `/studio/templates/${String(to.params.key)}` },
+        { path: 'screens/:merchantId?/:key?', redirect: (to) => (to.params.key ? `/studio/templates/${String(to.params.key)}` : '/studio/templates') },
         // an unknown Studio address stays in the Studio (not the customer app)
         { path: ':pathMatch(.*)*', redirect: '/studio/templates' }
       ]

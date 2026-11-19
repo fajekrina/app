@@ -96,6 +96,11 @@ export const studio = {
   saveScreen: (key: string, payload: unknown, lockVersion?: number) => call<ScreenDetail>('PUT', `/merchants/${mid()}/screens/${key}/draft`, { payload, lockVersion }),
   /** publish the page's values now (no review step); answers the page */
   publishScreen: (key: string) => call<ScreenDetail>('POST', `/merchants/${mid()}/screens/${key}/publish`),
+  /**
+   * one "Terbitkan" for a page: its template (when the design draft is newer than the release),
+   * then its content at that release; `dropped` = content of components the design no longer has
+   */
+  publishPage: (key: string) => call<{ template: TemplateDetail; page: ScreenDetail; dropped: string[] }>('POST', `/pages/${key}/publish`),
 
   /** pictures of the merchant (value-service keeps the bytes; a value set only names them) */
   assets: () => call<AssetRow[]>('GET', `/merchants/${mid()}/assets`),

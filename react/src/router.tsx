@@ -5,14 +5,14 @@ import StudioLoginPage from './pages/StudioLoginPage'
 import TemplatesPage from './pages/TemplatesPage'
 import { DEFAULT_MERCHANT, DEFAULT_SCREEN } from './sdui/config'
 
-/** old Screen Builder links: a page IS its template → its content tab */
+/** old links (Screen Builder, the former content tab): a page IS its template → its editor */
 function LegacyScreensRedirect() {
   const { key } = useParams()
-  return <Navigate to={key ? `/studio/templates/${key}/content` : '/studio/templates'} replace />
+  return <Navigate to={key ? `/studio/templates/${key}` : '/studio/templates'} replace />
 }
 
-// HLD Target web §4.3: one generic SDUI route; the Studio is one page per template with a
-// design tab and a content tab (the admin fills the page's values there).
+// HLD Target web §4.3: one generic SDUI route; the Studio is one page per template: one editor
+// for its design and content, one Terbitkan.
 export const router = createBrowserRouter([
   { path: '/', element: <Navigate to={`/s/${DEFAULT_MERCHANT}/${DEFAULT_SCREEN}`} replace /> },
   // a merchant's published page
@@ -27,7 +27,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/studio/templates" replace /> },
       { path: 'templates', element: <TemplatesPage /> },
       { path: 'templates/:key', element: <TemplatesPage /> },
-      { path: 'templates/:key/:tab', element: <TemplatesPage /> },
+      { path: 'templates/:key/:tab', element: <LegacyScreensRedirect /> },
       { path: 'screens', element: <LegacyScreensRedirect /> },
       { path: 'screens/:merchantId', element: <LegacyScreensRedirect /> },
       { path: 'screens/:merchantId/:key', element: <LegacyScreensRedirect /> },
