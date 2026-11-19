@@ -99,9 +99,9 @@ export const SAMPLE_DATA = {
   ticketCategorySummary: sample([['vip', 'VIP'], ['festival', 'Festival'], ['tribune', 'Tribun']]),
   coffeeSpending: {
     items: [
-      { key: '2025-02', label: 'Feb 2025', value: 600000, color: '#FDE8E8' },
-      { key: '2025-03', label: 'Mar 2025', value: 750000, color: '#FDE8E8' },
-      { key: '2025-04', label: 'Apr 2025', value: 1300000, color: '#D95C5C' }
+      { key: '2025-02', label: 'Feb 2025', value: 600000, amount: 'Rp600.000', color: '#FDE8E8' },
+      { key: '2025-03', label: 'Mar 2025', value: 750000, amount: 'Rp750.000', color: '#FDE8E8' },
+      { key: '2025-04', label: 'Apr 2025', value: 1300000, amount: 'Rp1.300.000', color: '#FDE8E8' }
     ],
     peak: { label: 'Apr 2025', value: 1300000, amount: 'Rp1.300.000' },
     note: 'Selama 3 bulan terakhir, pembelian kopi kamu meningkat terus.'
