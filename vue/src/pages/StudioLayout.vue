@@ -1,9 +1,8 @@
 <script setup lang="ts">
-/** Studio shell: needs a studio-bff session (one role: the template admin of its merchant). */
+/** Studio shell: a studio-bff session (internal users, one role) and the two tabs. */
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { studio, type Me } from '../api/studio'
-import { DEFAULT_SCREEN, screenPath } from '../sdui/config'
 
 const router = useRouter()
 const me = ref<Me | undefined>(studio.current())
@@ -23,8 +22,11 @@ async function logout() {
   <div v-if="me" class="min-vh-100 bg-light">
     <nav class="navbar bg-white border-bottom px-3 py-2 gap-2 small">
       <strong>sdui-r Studio</strong>
-      <span class="badge rounded-pill text-bg-primary bg-opacity-10 text-primary font-monospace" title="Admin template — merchant">{{ me.merchantId }}</span>
-      <RouterLink :to="screenPath(me.merchantId, DEFAULT_SCREEN)" class="ms-auto">Lihat halaman merchant →</RouterLink>
+      <ul class="nav nav-pills" aria-label="Studio">
+        <li class="nav-item"><RouterLink to="/studio/templates" class="nav-link py-1" active-class="active">Template</RouterLink></li>
+        <li class="nav-item"><RouterLink to="/studio/pages" class="nav-link py-1" active-class="active">Konten</RouterLink></li>
+      </ul>
+      <span class="ms-auto text-secondary" title="Pengguna">{{ me.name }}</span>
       <button class="btn btn-sm btn-link text-secondary" @click="logout">Keluar</button>
     </nav>
     <RouterView />

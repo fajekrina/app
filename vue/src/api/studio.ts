@@ -2,22 +2,30 @@
  * studio-bff client: a workforce session (dev login), CSRF on every write, and the relayed
  * template-service / value-service APIs.
  *
- * One Studio role — the template admin — and the admin IS the merchant: its login name is its
- * merchant id. It owns that merchant's templates (no one else sees them) and fills that
- * merchant's pages. Publishing is direct (no review step).
+ * Studio users are internal: one role, no review step (what they publish is live at once).
+ * - **Templates** are shared by every user: which components a page has, and their defaults.
+ * - **Pages** belong to a **kanal** (the API still calls it a merchant): a page is made from a
+ *   template and sets any prop of its components (spec 2.6). One template, many pages.
  */
-export interface Me { sub: string; name: string; roles: string[]; merchantId: string; csrf: string }
+export interface Me { sub: string; name: string; roles: string[]; csrf: string }
 /** a deprecated template starts no new page; pages that use it keep working */
 export interface Deprecation { deprecated?: boolean; deprecationReason?: string | null; replacedBy?: string | null; deprecatedBy?: string | null; deprecatedAt?: string | null }
 /** `unpublished`: the draft has changes that are not live yet */
 export interface TemplateRow extends Deprecation { key: string; title?: string; status: string; activeVersion?: number; lockVersion: number; unpublished: boolean }
 export interface Release { version: number; title?: string; publishedBy?: string; releasedAt?: string }
 export interface TemplateDetail extends TemplateRow { draft: unknown | null; active: { version: number; payload: object; publishedBy?: string } | null; releases: Release[] }
+/** a page of a kanal, made from a template */
+export interface PageRow { kanal: string; key: string; templateKey: string; templateVersion: number; status: string; activeSequence?: number; unpublished: boolean }
 export interface ScreenRow { key: string; templateKey: string; templateVersion: number; status: string; activeSequence?: number; lockVersion: number; unpublished: boolean }
 export interface ScreenDetail extends ScreenRow { draft: unknown | null; active: { sequence: number; payload: object; publishedBy?: string } | null }
-export interface CatalogEntry extends Deprecation { key: string; version: number; title?: string }
+/** a template a kanal may use: `shared` (every Studio template) or the kanal's own older one */
+export interface CatalogEntry extends Deprecation { key: string; version: number; title?: string; shared?: boolean }
+export interface Kanal { merchantId: string; name: string }
 /** an uploaded picture: `name` goes into `image.name` */
 export interface AssetRow { name: string; contentType: string; size: number; source: 'UPLOAD' | 'URL'; sourceUrl?: string; originalName?: string; publishedAt?: string | null }
+
+/** the kanal that holds the shared templates' pictures (uploaded in the Template tab) */
+export const SHARED_KANAL = 'sdui'
 
 /** the builder's view of a deprecation (`null` = in use) */
 export function deprecationOf(row: Deprecation | null | undefined): { reason?: string; replacedBy?: string; by?: string; at?: string } | null {
@@ -51,17 +59,11 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return json as T
 }
 
-/** the merchant of the session (the admin's own), for a URL */
-const mid = () => {
-  if (!me) throw new StudioError(401, 'login required')
-  return encodeURIComponent(me.merchantId)
-}
+const k = (id: string) => encodeURIComponent(id)
 
 export const studio = {
   current: () => me,
-  /** the admin's merchant id */
-  merchantId: () => me?.merchantId ?? '',
-  /** the dev login: the admin's name IS its merchant id */
+  /** the dev login: a person's name (not a kanal) */
   async login(username: string): Promise<Me> {
     me = await call<Me>('POST', '/login', { username })
     return me
@@ -74,7 +76,7 @@ export const studio = {
     try { await call('POST', '/logout') } finally { me = undefined }
   },
 
-  // the admin's own templates
+  // ---- the Template tab: shared templates
   templates: () => call<TemplateRow[]>('GET', '/templates'),
   template: (key: string) => call<TemplateDetail>('GET', `/templates/${key}`),
   saveTemplate: (key: string, payload: unknown, lockVersion?: number) => call<TemplateDetail>('PUT', `/templates/${key}/draft`, { payload, lockVersion }),
@@ -83,30 +85,35 @@ export const studio = {
   /** no new pages from it; existing pages keep working */
   deprecateTemplate: (key: string, reason: string, replacedBy?: string) => call<TemplateDetail>('PUT', `/templates/${key}/deprecation`, { reason, replacedBy }),
   restoreTemplate: (key: string) => call<TemplateDetail>('DELETE', `/templates/${key}/deprecation`),
-
-  /** the admin's released templates (latest of each key) */
-  catalog: () => call<CatalogEntry[]>('GET', `/catalog/templates/${mid()}`),
-  releasedTemplate: (key: string, version: number) => call<unknown>('GET', `/catalog/templates/${mid()}/${key}/v${version}`),
   /** every given release of a template (the Template Builder never reuses their component ids) */
-  releasedTemplates: (key: string, versions: number[]) => Promise.all(versions.map((v) => call<unknown>('GET', `/catalog/templates/${mid()}/${key}/v${v}`))),
+  releasedTemplates: (key: string, versions: number[]) => Promise.all(versions.map((v) => call<unknown>('GET', `/catalog/templates/${SHARED_KANAL}/${key}/v${v}`))),
 
-  // the admin's pages (a page IS its template: its key is the template key)
-  screens: () => call<ScreenRow[]>('GET', `/merchants/${mid()}/screens`),
-  screen: (key: string) => call<ScreenDetail>('GET', `/merchants/${mid()}/screens/${key}`),
-  saveScreen: (key: string, payload: unknown, lockVersion?: number) => call<ScreenDetail>('PUT', `/merchants/${mid()}/screens/${key}/draft`, { payload, lockVersion }),
-  /** publish the page's values now (no review step); answers the page */
-  publishScreen: (key: string) => call<ScreenDetail>('POST', `/merchants/${mid()}/screens/${key}/publish`),
+  // ---- kanals
+  kanals: () => call<Kanal[]>('GET', '/merchants'),
+  /** make a kanal (`id`: letters, digits, _) */
+  createKanal: (id: string, name?: string) => call<Kanal>('POST', '/merchants', { merchantId: id, name }),
+
+  // ---- the Konten tab: pages of a kanal
+  /** the released templates a kanal may start a page from (shared ones, and its own older ones) */
+  catalog: (kanal: string) => call<CatalogEntry[]>('GET', `/catalog/templates/${k(kanal)}`),
+  releasedTemplate: (kanal: string, key: string, version: number) => call<unknown>('GET', `/catalog/templates/${k(kanal)}/${key}/v${version}`),
+  /** every page (`template`: only the pages made from it), across kanals */
+  pages: (template?: string) => call<PageRow[]>('GET', template ? `/pages?template=${encodeURIComponent(template)}` : '/pages'),
+  screens: (kanal: string) => call<ScreenRow[]>('GET', `/merchants/${k(kanal)}/screens`),
+  screen: (kanal: string, key: string) => call<ScreenDetail>('GET', `/merchants/${k(kanal)}/screens/${key}`),
+  saveScreen: (kanal: string, key: string, payload: unknown, lockVersion?: number) => call<ScreenDetail>('PUT', `/merchants/${k(kanal)}/screens/${key}/draft`, { payload, lockVersion }),
   /**
-   * one "Terbitkan" for a page: its template (when the design draft is newer than the release),
-   * then its content at that release; `dropped` = content of components the design no longer has
+   * publish the page now (no review step); with `templateVersion`, its values are carried over
+   * to that template release first — the answer then lists what was `dropped`
    */
-  publishPage: (key: string) => call<{ template: TemplateDetail; page: ScreenDetail; dropped: string[] }>('POST', `/pages/${key}/publish`),
+  publishScreen: (kanal: string, key: string, templateVersion?: number) =>
+    call<ScreenDetail & { dropped?: string[] }>('POST', `/merchants/${k(kanal)}/screens/${key}/publish`, templateVersion === undefined ? undefined : { templateVersion }),
 
-  /** pictures of the merchant (value-service keeps the bytes; a value set only names them) */
-  assets: () => call<AssetRow[]>('GET', `/merchants/${mid()}/assets`),
-  /** a picked / dropped file, or a link the backend copies once; answers the asset name */
-  async uploadAsset(source: { file: Blob & { name?: string } } | { url: string }): Promise<string> {
+  /** pictures of a kanal (value-service keeps the bytes; a value set only names them) */
+  assets: (kanal: string) => call<AssetRow[]>('GET', `/merchants/${k(kanal)}/assets`),
+  /** a picked / dropped file, or a link the backend copies once, for `kanal`; answers the asset name */
+  async uploadAsset(kanal: string, source: { file: Blob & { name?: string } } | { url: string }): Promise<string> {
     const body = 'url' in source ? { url: source.url } : { filename: source.file.name ?? 'picture', data: await base64(source.file) }
-    return (await call<AssetRow>('POST', `/merchants/${mid()}/assets`, body)).name
+    return (await call<AssetRow>('POST', `/merchants/${k(kanal)}/assets`, body)).name
   }
 }

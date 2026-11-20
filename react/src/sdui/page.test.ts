@@ -1,83 +1,109 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // the studio-bff client, recorded
-const calls: Array<[string, string, unknown]> = []
+const calls: Array<[string, ...unknown[]]> = []
+const PAGES: Array<{ kanal: string; key: string; templateKey: string; templateVersion: number }> = []
 vi.mock('../api/studio', () => ({
+  StudioError: class extends Error { constructor(readonly status: number, message: string) { super(message) } },
   studio: {
     saveTemplate: vi.fn(async (key: string, payload: { template: object }) => {
-      calls.push(['saveTemplate', key, payload])
+      calls.push(['saveTemplate', key])
       return { key, lockVersion: 2, activeVersion: 1, draft: { ...payload, template: { ...payload.template, key, version: 2 } } }
     }),
-    saveScreen: vi.fn(async (key: string, payload: unknown) => {
-      calls.push(['saveScreen', key, payload])
+    publishTemplate: vi.fn(async (key: string) => { calls.push(['publishTemplate', key]); return { key, activeVersion: 2 } }),
+    saveScreen: vi.fn(async (kanal: string, key: string, payload: unknown) => {
+      calls.push(['saveScreen', kanal, key, payload])
       return { key, lockVersion: 5, draft: payload }
     }),
-    publishPage: vi.fn(async (key: string) => {
-      calls.push(['publishPage', key, undefined])
-      return { template: { key, activeVersion: 2 }, page: { key, activeSequence: 3 }, dropped: [] }
-    })
+    publishScreen: vi.fn(async (kanal: string, key: string, version?: number) => {
+      calls.push(['publishScreen', kanal, key, version])
+      if (key === 'broken') throw new Error('nope')
+      return { key, activeSequence: 3, dropped: version ? ['gone'] : undefined }
+    }),
+    pages: vi.fn(async () => PAGES),
+    screen: vi.fn(async (_kanal: string, key: string) => ({ key, draft: VALUES, active: null }))
   }
 }))
 
-const { baselineOf, editorSource, publishPage, savePageDraft } = await import('./page')
+const { createPage, pageBaseline, pageSource, pageValues, pagesToUpdate, publishPage, publishTemplateDraft, sampleTexts, savePage, updatePages } = await import('./page')
 
-// the stored halves of one page: a template without content, and its content
+// a shared template (with its sample texts) and a page's values (2.6: what differs)
 const TEMPLATE = {
-  schemaVersion: '2.2',
+  schemaVersion: '2.6',
   template: { key: 'insight', version: 1, root: { type: 'vstack', id: 'root', order: 0, props: { spacing: 8 }, children: [
-    { type: 'text', id: 'text1', order: 0, props: { style: 'title' } },
-    { type: 'button', id: 'button1', order: 1, props: { variant: 'primary' }, action: { type: 'api', request: 'submitCheckout' } }
+    { type: 'text', id: 'title', order: 0, props: { value: '[Insight Title]', size: 18 } },
+    { type: 'button', id: 'cta', order: 1, props: { title: '[CTA Text]', variant: 'primary' }, action: { type: 'dismiss' } }
   ] } }
 }
-const VALUES = { schemaVersion: '2.2', values: { screen: 'insight', template: { key: 'insight', version: 1 }, components: { text1: { props: { value: 'Halo' } }, button1: { props: { title: 'Kirim' } } } } }
-const state = () => ({
-  template: { key: 'insight', lockVersion: 1, activeVersion: 1, draft: TEMPLATE, active: { version: 1, payload: TEMPLATE } } as never,
-  page: { key: 'insight', lockVersion: 4, draft: VALUES, active: { sequence: 1, payload: VALUES } } as never
-})
-type Doc = { template: { root: { children: Array<{ props: Record<string, unknown> }> } } }
-const edited = (change: (doc: Doc) => void) => {
-  const doc = structuredClone(editorSource(state()).source) as unknown as Doc
-  change(doc)
-  return doc
-}
+const VALUES = { schemaVersion: '2.6', values: { screen: 'insightKopi', template: { key: 'insight', version: 1 }, components: {
+  title: { props: { value: 'Kopi bulan ini', color: '#0F766E' } },
+  cta: { action: { type: 'navigate', screen: 'kopiDetail' } }
+} } }
+const page = () => ({ key: 'insightKopi', templateKey: 'insight', templateVersion: 1, lockVersion: 4, draft: VALUES, active: { sequence: 1, payload: VALUES } }) as never
+type Doc = { template: { root: { children: Array<{ props: Record<string, unknown>; action?: unknown }> } } }
 
-beforeEach(() => { calls.length = 0 })
+beforeEach(() => { calls.length = 0; PAGES.length = 0 })
 
-describe('one editor for a page, two stores', () => {
-  it('opens the design with its content written in', () => {
-    const { source, dropped } = editorSource(state())
+describe('Konten: a page = a template + what it sets', () => {
+  it('opens the template with the page written in (content, style, action)', () => {
+    const { source, dropped } = pageSource(TEMPLATE, page())
     expect(dropped).toEqual([])
     const children = (source as unknown as Doc).template.root.children
-    expect(children[0]!.props).toEqual({ style: 'title', value: 'Halo' })
-    expect(children[1]!.props).toEqual({ variant: 'primary', title: 'Kirim' })
-    expect(baselineOf(state())).toEqual(source)
+    expect(children[0]!.props).toEqual({ value: 'Kopi bulan ini', size: 18, color: '#0F766E' })
+    expect(children[1]!.action).toEqual({ type: 'navigate', screen: 'kopiDetail' })
+    expect(pageBaseline(TEMPLATE, page())).toEqual(source)
+    expect(sampleTexts(source)).toEqual(['cta.title'])
   })
 
-  it('a content-only edit saves the content, not a new template version', async () => {
-    await savePageDraft('insight', edited((d) => { d.template.root.children[0]!.props.value = 'Halo lagi' }), state())
+  it('stores only what differs from the template; an unchanged page is not saved again', async () => {
+    const edited = structuredClone(pageSource(TEMPLATE, page()).source) as unknown as Doc
+    edited.template.root.children[1]!.props.title = 'Lihat'
+    edited.template.root.children[0]!.props.size = 18   // the template's own value: not stored
+    expect(pageValues('insightKopi', edited, TEMPLATE)).toMatchObject({ values: { components: {
+      title: { props: { value: 'Kopi bulan ini', color: '#0F766E' } },
+      cta: { props: { title: 'Lihat' }, action: { type: 'navigate', screen: 'kopiDetail' } }
+    } } })
+    await savePage('wondr', 'insightKopi', edited, TEMPLATE, page())
     expect(calls.map((c) => c[0])).toEqual(['saveScreen'])
-    const values = (calls[0]![2] as typeof VALUES).values
-    expect(values.template).toEqual({ key: 'insight', version: 1 })
-    expect(values.components.text1).toEqual({ props: { value: 'Halo lagi' } })
+    calls.length = 0
+    await savePage('wondr', 'insightKopi', pageSource(TEMPLATE, page()).source, TEMPLATE, page())
+    expect(calls).toEqual([])
   })
 
-  it('a design edit saves the template without content, then the content for its draft version', async () => {
-    await savePageDraft('insight', edited((d) => { d.template.root.children[0]!.props.style = 'headline' }), state())
-    expect(calls.map((c) => c[0])).toEqual(['saveTemplate', 'saveScreen'])
-    const template = calls[0]![2] as Doc
-    expect(template.template.root.children[0]!.props).toEqual({ style: 'headline' })
-    expect(template.template.root.children[1]!.props).toEqual({ variant: 'primary' })
-    // the same content, now for the template version being drafted
-    const values = (calls[1]![2] as typeof VALUES).values
-    expect(values.template).toEqual({ key: 'insight', version: 2 })
-    expect(values.components).toEqual(VALUES.values.components)
+  it('Terbitkan saves, then publishes the page', async () => {
+    const onSaved = vi.fn()
+    const res = await publishPage('wondr', 'insightKopi', pageSource(TEMPLATE, page()).source, TEMPLATE, page(), onSaved)
+    expect(onSaved).toHaveBeenCalledOnce()
+    expect(calls).toEqual([['publishScreen', 'wondr', 'insightKopi', undefined]])
+    expect(res.page.activeSequence).toBe(3)
   })
 
-  it('nothing changed: nothing is saved; Terbitkan still publishes the page', async () => {
-    const saved = vi.fn()
-    const res = await publishPage('insight', editorSource(state()).source, state(), saved)
-    expect(calls.map((c) => c[0])).toEqual(['publishPage'])
-    expect(saved).toHaveBeenCalledOnce()
-    expect(res.page?.activeSequence).toBe(3)
+  it('a new page starts from a template release with no values', async () => {
+    await createPage('wondr', 'insightBaru', 'insight', 1)
+    expect(calls[0]!.slice(0, 3)).toEqual(['saveScreen', 'wondr', 'insightBaru'])
+    expect(calls[0]![3]).toEqual({ schemaVersion: '2.6', values: { screen: 'insightBaru', template: { key: 'insight', version: 1 }, components: {} } })
+  })
+})
+
+describe('Template: release, then the pages made from it', () => {
+  it('an unchanged design is not saved again before it is released', async () => {
+    const t = { key: 'insight', lockVersion: 1, activeVersion: 1, draft: TEMPLATE } as never
+    const res = await publishTemplateDraft('insight', TEMPLATE, t, vi.fn())
+    expect(calls.map((c) => c[0])).toEqual(['publishTemplate'])
+    expect(res.template.activeVersion).toBe(2)
+  })
+
+  it('lists the pages behind the release with what they would lose; updates the chosen ones', async () => {
+    PAGES.push({ kanal: 'wondr', key: 'insightKopi', templateKey: 'insight', templateVersion: 1 }, { kanal: 'wondr', key: 'fresh', templateKey: 'insight', templateVersion: 2 })
+    const v2 = structuredClone(TEMPLATE)
+    v2.template.version = 2
+    v2.template.root.children.pop()   // the release drops the button
+    const behind = await pagesToUpdate('insight', 2, v2)
+    expect(behind.map((p) => [p.key, p.dropped])).toEqual([['insightKopi', ['cta']]])
+    const results = await updatePages([{ kanal: 'wondr', key: 'insightKopi' }, { kanal: 'wondr', key: 'broken' }], 2)
+    expect(results).toEqual([
+      { kanal: 'wondr', key: 'insightKopi', ok: true, dropped: ['gone'] },
+      { kanal: 'wondr', key: 'broken', ok: false, dropped: [], error: 'nope' }
+    ])
   })
 })

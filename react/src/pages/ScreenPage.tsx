@@ -37,7 +37,7 @@ export default function ScreenPage() {
   const [engine, setEngine] = useState<SduiEngine>()
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
   const [error, setError] = useState<string>()
-  // every merchant with a published page (not a fixed list); the current one always stays
+  // every kanal with a published page (not a fixed list); the current one always stays
   const [merchants, setMerchants] = useState<PublicMerchant[]>([])
   useEffect(() => { void publicMerchants().then(setMerchants).catch((e) => console.warn('[sdui-r] merchants', e)) }, [])
   const valid = isMerchantId(merchant)
@@ -68,7 +68,7 @@ export default function ScreenPage() {
         <strong className="text-slate-900">sdui-r · React + Tailwind</strong>
         <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600">{merchant} / {screen}</span>
         <label className="flex items-center gap-1 text-slate-500">
-          merchant
+          kanal
           <select className="rounded border border-slate-300 px-1 py-0.5" value={merchant}
             onChange={(e) => navigate(`${screenPath(e.target.value, screen)}${toQuery(seed)}`)}>
             {!merchants.some((m) => m.merchantId === merchant) && <option value={merchant}>{merchant}</option>}
@@ -79,7 +79,7 @@ export default function ScreenPage() {
         <Link to="/studio" className="ml-auto text-indigo-600 hover:underline">Studio →</Link>
       </header>
       <main className="mx-auto max-w-5xl">
-        {!valid && <p className="p-6 text-red-600">ID merchant tidak valid: <code>{merchant}</code></p>}
+        {!valid && <p className="p-6 text-red-600">ID kanal tidak valid: <code>{merchant}</code></p>}
         {error && <p className="p-6 text-red-600">{error}</p>}
         {engine ? <SduiScreen key={`${merchant}/${key}`} engine={engine} source={{ key }} seed={seed} /> : valid && !error && <p className="p-6 text-slate-400">Memuat…</p>}
       </main>

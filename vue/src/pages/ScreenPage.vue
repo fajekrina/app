@@ -21,7 +21,7 @@ const seed = computed(() => Object.fromEntries(Object.entries(route.query).filte
 const engine = shallowRef<SduiEngine>()
 const online = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
 const error = ref<string>()
-// every merchant with a published page (not a fixed list); the current one always stays
+// every kanal with a published page (not a fixed list); the current one always stays
 const merchants = ref<PublicMerchant[]>([])
 publicMerchants().then((list) => { merchants.value = list }).catch((e) => console.warn('[sdui-r] merchants', e))
 const listed = computed(() => merchants.value.some((m) => m.merchantId === merchant.value))
@@ -58,7 +58,7 @@ const switchMerchant = (event: Event) => void router.push({ path: screenPath((ev
     <nav class="navbar bg-white border-bottom px-4 py-2 gap-3 small">
       <strong>sdui-r · Vue + Bootstrap</strong>
       <span class="badge text-bg-light font-monospace">{{ merchant }} / {{ screen }}</span>
-      <label class="d-flex align-items-center gap-1 text-secondary">merchant
+      <label class="d-flex align-items-center gap-1 text-secondary">kanal
         <select class="form-select form-select-sm" :value="merchant" @change="switchMerchant">
           <option v-if="!listed" :value="merchant">{{ merchant }}</option>
           <option v-for="m in merchants" :key="m.merchantId" :value="m.merchantId">{{ m.name === m.merchantId ? m.merchantId : `${m.name} (${m.merchantId})` }}</option>
@@ -68,7 +68,7 @@ const switchMerchant = (event: Event) => void router.push({ path: screenPath((ev
       <RouterLink to="/studio" class="ms-auto">Studio →</RouterLink>
     </nav>
     <main class="container" style="max-width: 64rem">
-      <p v-if="!valid" class="text-danger p-4">ID merchant tidak valid: <code>{{ merchant }}</code></p>
+      <p v-if="!valid" class="text-danger p-4">ID kanal tidak valid: <code>{{ merchant }}</code></p>
       <p v-if="error" class="text-danger p-4">{{ error }}</p>
       <SduiScreen v-if="engine" :key="`${merchant}/${screen}`" :engine="engine" :source="{ key: screen }" :seed="seed" />
       <p v-else-if="valid && !error" class="text-secondary p-4">Memuat…</p>
