@@ -2,10 +2,12 @@
  * studio-bff client: a workforce session (dev login), CSRF on every write, and the relayed
  * template-service / value-service APIs.
  *
- * Studio users are internal: one role, no review step (what they publish is live at once).
- * - **Templates** are shared by every user: which components a page has, and their defaults.
- * - **Pages** belong to a **kanal** (the API still calls it a merchant): a page is made from a
- *   template and sets any prop of its components (spec 2.6). One template, many pages.
+ * Studio users are internal: one role, no review step (what they publish is live at once), and
+ * NOTHING belongs to a user — a user is only recorded as who made and published what.
+ * - **Templates**: which components a page has, and their defaults. Every user sees them all.
+ * - **Pages**: made from a template, setting any prop of its components (spec 2.6). Every user
+ *   sees them all. New pages live in one space (`PAGE_SPACE`; the API calls it a merchant) and
+ *   render at `/s/<page>`; older pages keep their old space (`merchant_demo` …).
  */
 export interface Me { sub: string; name: string; roles: string[]; csrf: string }
 /** a deprecated template starts no new page; pages that use it keep working */
@@ -20,12 +22,13 @@ export interface ScreenRow { key: string; templateKey: string; templateVersion: 
 export interface ScreenDetail extends ScreenRow { draft: unknown | null; active: { sequence: number; payload: object; publishedBy?: string } | null }
 /** a template a kanal may use: `shared` (every Studio template) or the kanal's own older one */
 export interface CatalogEntry extends Deprecation { key: string; version: number; title?: string; shared?: boolean }
-export interface Kanal { merchantId: string; name: string }
 /** an uploaded picture: `name` goes into `image.name` */
 export interface AssetRow { name: string; contentType: string; size: number; source: 'UPLOAD' | 'URL'; sourceUrl?: string; originalName?: string; publishedAt?: string | null }
 
-/** the kanal that holds the shared templates' pictures (uploaded in the Template tab) */
-export const SHARED_KANAL = 'sdui'
+/** the one page space of the Studio: every new page, and the templates' pictures */
+export const PAGE_SPACE = 'sdui'
+/** @deprecated the same space as `PAGE_SPACE` */
+export const SHARED_KANAL = PAGE_SPACE
 
 /** the builder's view of a deprecation (`null` = in use) */
 export function deprecationOf(row: Deprecation | null | undefined): { reason?: string; replacedBy?: string; by?: string; at?: string } | null {
@@ -88,16 +91,11 @@ export const studio = {
   /** every given release of a template (the Template Builder never reuses their component ids) */
   releasedTemplates: (key: string, versions: number[]) => Promise.all(versions.map((v) => call<unknown>('GET', `/catalog/templates/${SHARED_KANAL}/${key}/v${v}`))),
 
-  // ---- kanals
-  kanals: () => call<Kanal[]>('GET', '/merchants'),
-  /** make a kanal (`id`: letters, digits, _) */
-  createKanal: (id: string, name?: string) => call<Kanal>('POST', '/merchants', { merchantId: id, name }),
-
-  // ---- the Konten tab: pages of a kanal
-  /** the released templates a kanal may start a page from (shared ones, and its own older ones) */
+  // ---- the Konten tab: pages (`kanal` = the page's space: `PAGE_SPACE`, or an older one)
+  /** the released templates a space may start a page from (the shared ones, and an older space's own) */
   catalog: (kanal: string) => call<CatalogEntry[]>('GET', `/catalog/templates/${k(kanal)}`),
   releasedTemplate: (kanal: string, key: string, version: number) => call<unknown>('GET', `/catalog/templates/${k(kanal)}/${key}/v${version}`),
-  /** every page (`template`: only the pages made from it), across kanals */
+  /** every page (`template`: only the pages made from it), of every space */
   pages: (template?: string) => call<PageRow[]>('GET', template ? `/pages?template=${encodeURIComponent(template)}` : '/pages'),
   screens: (kanal: string) => call<ScreenRow[]>('GET', `/merchants/${k(kanal)}/screens`),
   screen: (kanal: string, key: string) => call<ScreenDetail>('GET', `/merchants/${k(kanal)}/screens/${key}`),
@@ -109,9 +107,9 @@ export const studio = {
   publishScreen: (kanal: string, key: string, templateVersion?: number) =>
     call<ScreenDetail & { dropped?: string[] }>('POST', `/merchants/${k(kanal)}/screens/${key}/publish`, templateVersion === undefined ? undefined : { templateVersion }),
 
-  /** pictures of a kanal (value-service keeps the bytes; a value set only names them) */
+  /** pictures of a space (value-service keeps the bytes; a value set only names them) */
   assets: (kanal: string) => call<AssetRow[]>('GET', `/merchants/${k(kanal)}/assets`),
-  /** a picked / dropped file, or a link the backend copies once, for `kanal`; answers the asset name */
+  /** a picked / dropped file, or a link the backend copies once, into a space; answers the asset name */
   async uploadAsset(kanal: string, source: { file: Blob & { name?: string } } | { url: string }): Promise<string> {
     const body = 'url' in source ? { url: source.url } : { filename: source.file.name ?? 'picture', data: await base64(source.file) }
     return (await call<AssetRow>('POST', `/merchants/${k(kanal)}/assets`, body)).name

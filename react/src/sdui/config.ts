@@ -123,7 +123,11 @@ export function isMerchantId(id: string): boolean {
   return /^[A-Za-z][A-Za-z0-9_]{1,63}$/.test(id)
 }
 
-/** the customer app's address of a merchant's page: `/s/<merchant>/<screen>` */
+/** the Studio's one page space (new pages render at `/s/<page>`, no merchant / kanal / user) */
+export const PAGE_SPACE = 'sdui'
+
+/** the customer app's address of a page: `/s/<page>`; an older space's page `/s/<space>/<page>` */
 export function screenPath(merchantId: string, screen: string): string {
+  if (merchantId === PAGE_SPACE) return `/s/${encodeURIComponent(screen)}`
   return `/s/${encodeURIComponent(merchantId)}/${encodeURIComponent(screen)}`
 }

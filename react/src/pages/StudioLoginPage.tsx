@@ -1,7 +1,7 @@
 /**
  * Dev stand-in for the workforce SSO (HLD Target §4.2). Studio users are internal: one role,
- * so the login only asks for a name (a person, not a kanal). Every user sees the shared
- * templates and every kanal's pages, and publishes without a review step.
+ * so the login only asks for a name (a person). Nothing belongs to a user: every user sees the
+ * templates and pages, and publishes without a review step; the name only records who did what.
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -29,7 +29,7 @@ export default function StudioLoginPage() {
         <label className="block text-sm">Nama pengguna
           <input required pattern="[A-Za-z][A-Za-z0-9._\-]{1,63}" className="mt-1 w-full rounded border border-slate-300 px-2 py-1"
             placeholder="mis. fajrina" value={username} onChange={(e) => setUsername(e.target.value)} />
-          <span className="text-xs text-slate-500">Huruf, angka, titik, _ atau -. Semua pengguna memakai template yang sama dan mengelola halaman semua kanal.</span>
+          <span className="text-xs text-slate-500">Huruf, angka, titik, _ atau -. Semua pengguna melihat dan mengelola semua template dan halaman; nama Anda hanya dicatat sebagai pembuat dan penerbit.</span>
         </label>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button className="w-full rounded bg-indigo-600 py-2 text-white hover:bg-indigo-700">Masuk</button>

@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { EditorDocument, SduiTemplateBuilder } from '@fajekrina/sdui-r/builder/react'
-import { SHARED_KANAL, StudioError, deprecationOf, studio, type PageRow, type TemplateDetail, type TemplateRow } from '../api/studio'
+import { PAGE_SPACE, SHARED_KANAL, StudioError, deprecationOf, studio, type PageRow, type TemplateDetail, type TemplateRow } from '../api/studio'
 import { CATALOG, SAMPLE_DATA, studioAssetURL } from '../sdui/config'
 import { pagesToUpdate, publishTemplateDraft, saveTemplateDraft, templateSource, updatePages, type PageUpdate, type PageUpdateResult } from '../sdui/page'
 import { Sidebar } from '../components/Sidebar'
@@ -62,7 +62,7 @@ export default function TemplatesPage() {
     return doc
   }, [key, detail === undefined])   // eslint-disable-line react-hooks/exhaustive-deps
 
-  // a navigate goes to a page of the same kanal: offer every page key;
+  // a navigate goes to another page: offer every page key;
   // its replacement, when deprecated, is another template
   const catalog = useMemo(() => ({
     ...CATALOG,
@@ -146,7 +146,7 @@ export default function TemplatesPage() {
                   <li key={id}>
                     <label className="flex items-start gap-2">
                       <input type="checkbox" checked={offer.chosen.has(id)} onChange={() => toggle(id)} />
-                      <span><span className="font-mono">{id}</span> <span className="text-slate-500">(v{p.templateVersion})</span>
+                      <span><span className="font-mono">{p.kanal === PAGE_SPACE ? p.key : `${p.key} · lama (${p.kanal})`}</span> <span className="text-slate-500">(v{p.templateVersion})</span>
                         {p.dropped.length > 0 && <span className="block text-xs text-amber-800">Akan hilang: {p.dropped.join(', ')}</span>}
                       </span>
                     </label>
@@ -164,7 +164,7 @@ export default function TemplatesPage() {
           <div className="flex-none border-b border-slate-200 bg-white p-3 text-xs" role="status">
             {results.map((r) => (
               <div key={`${r.kanal}/${r.key}`} className={r.ok ? 'text-emerald-700' : 'text-red-600'}>
-                {r.kanal}/{r.key}: {r.ok ? `terbit${r.dropped.length ? ` (dibuang: ${r.dropped.join(', ')})` : ''}` : `gagal — ${r.error}`}
+                {r.kanal === PAGE_SPACE ? r.key : `${r.key} · lama (${r.kanal})`}: {r.ok ? `terbit${r.dropped.length ? ` (dibuang: ${r.dropped.join(', ')})` : ''}` : `gagal — ${r.error}`}
               </div>
             ))}
           </div>

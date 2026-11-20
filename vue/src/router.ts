@@ -4,16 +4,17 @@ import StudioLayout from './pages/StudioLayout.vue'
 import StudioLoginPage from './pages/StudioLoginPage.vue'
 import TemplatesPage from './pages/TemplatesPage.vue'
 import PagesPage from './pages/PagesPage.vue'
-import { DEFAULT_MERCHANT, DEFAULT_SCREEN, screenPath, specScreenKey } from './sdui/config'
+import { DEFAULT_MERCHANT, DEFAULT_SCREEN, PAGE_SPACE, screenPath, specScreenKey } from './sdui/config'
 
-// HLD Target web §4.3: one generic SDUI route. The Studio has two tabs: Template (the shared
-// templates) and Konten (the pages of a kanal), one editor in both.
+// HLD Target web §4.3: one generic SDUI route — `/s/<page>` (pages made before 2.6 keep
+// `/s/<space>/<page>`). The Studio has two tabs, one editor in both: Template and Konten.
+// Nothing in it belongs to a user.
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: screenPath(DEFAULT_MERCHANT, DEFAULT_SCREEN) },
     {
-      // a kanal's published page
+      // a page made before 2.6, in its old space
       path: '/s/:merchantId/:screen',
       component: ScreenPage,
       // old kebab-case keys (`seat-selection`) → the screen key, query kept
@@ -24,11 +25,15 @@ export const router = createRouter({
       }
     },
     {
-      // old links: /s/:screen?m=<kanal> → /s/<kanal>/<screen>
+      // a published page (no merchant / kanal / user in its address); old links `?m=<space>` → its old space
       path: '/s/:screen',
-      redirect: (to) => {
+      component: ScreenPage,
+      beforeEnter: (to) => {
         const { m, ...rest } = to.query
-        return { path: screenPath(typeof m === 'string' ? m : DEFAULT_MERCHANT, specScreenKey(String(to.params.screen))), query: rest }
+        const key = String(to.params.screen)
+        if (typeof m === 'string') return { path: screenPath(m, specScreenKey(key)), query: rest, replace: true }
+        const spec = specScreenKey(key)
+        return spec === key ? true : { path: screenPath(PAGE_SPACE, spec), query: to.query, replace: true }
       }
     },
     { path: '/studio/login', component: StudioLoginPage },
@@ -40,9 +45,11 @@ export const router = createRouter({
         { path: 'templates/:key?', component: TemplatesPage },
         // the old Desain / Isi konten tabs → the template
         { path: 'templates/:key/:tab', redirect: (to) => `/studio/templates/${String(to.params.key)}` },
-        { path: 'pages/:kanal?/:key?', component: PagesPage },
+        // a page; an older page keeps its old space
+        { path: 'pages/:key?', component: PagesPage },
+        { path: 'pages/:space/:key', component: PagesPage },
         // old links (the former content tab, the Screen Builder) → the Konten tab
-        { path: 'screens/:merchantId?/:key?', redirect: (to) => (to.params.merchantId ? `/studio/pages/${String(to.params.merchantId)}${to.params.key ? `/${String(to.params.key)}` : ''}` : '/studio/pages') },
+        { path: 'screens/:merchantId?/:key?', redirect: (to) => (to.params.merchantId && to.params.key ? `/studio/pages/${String(to.params.merchantId)}/${String(to.params.key)}` : '/studio/pages') },
         // an unknown Studio address stays in the Studio (not the customer app)
         { path: ':pathMatch(.*)*', redirect: '/studio/pages' }
       ]

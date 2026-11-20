@@ -8,7 +8,7 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { EditorDocument, SduiTemplateBuilder } from '@fajekrina/sdui-r/builder/vue'
-import { SHARED_KANAL, StudioError, deprecationOf, studio, type PageRow, type TemplateDetail, type TemplateRow } from '../api/studio'
+import { PAGE_SPACE, SHARED_KANAL, StudioError, deprecationOf, studio, type PageRow, type TemplateDetail, type TemplateRow } from '../api/studio'
 import { CATALOG, SAMPLE_DATA, studioAssetURL } from '../sdui/config'
 import { pagesToUpdate, publishTemplateDraft, saveTemplateDraft, templateSource, updatePages, type PageUpdate, type PageUpdateResult } from '../sdui/page'
 import StudioSidebar from '../components/StudioSidebar.vue'
@@ -37,7 +37,7 @@ async function reload() {
 }
 reload().catch((e: Error) => { error.value = e.message })
 const usedBy = (k: string) => pages.value.filter((p) => p.templateKey === k)
-// a navigate goes to a page of the same kanal: offer every page key; its replacement, when
+// a navigate goes to another page: offer every page key; its replacement, when
 // deprecated, is another template
 const catalog = computed(() => ({
   ...CATALOG,
@@ -144,7 +144,7 @@ const upload = (source: Parameters<typeof studio.uploadAsset>[1]) => studio.uplo
         <div v-for="p in offer.pages" :key="`${p.kanal}/${p.key}`" class="form-check">
           <input :id="`upd-${p.kanal}-${p.key}`" class="form-check-input" type="checkbox" :checked="offer.chosen.has(`${p.kanal}/${p.key}`)" @change="toggle(`${p.kanal}/${p.key}`)" />
           <label class="form-check-label" :for="`upd-${p.kanal}-${p.key}`">
-            <span class="font-monospace">{{ p.kanal }}/{{ p.key }}</span> <span class="text-secondary">(v{{ p.templateVersion }})</span>
+            <span class="font-monospace">{{ p.kanal === PAGE_SPACE ? p.key : `${p.key} · lama (${p.kanal})` }}</span> <span class="text-secondary">(v{{ p.templateVersion }})</span>
             <span v-if="p.dropped.length" class="d-block text-warning-emphasis">Akan hilang: {{ p.dropped.join(', ') }}</span>
           </label>
         </div>
@@ -155,7 +155,7 @@ const upload = (source: Parameters<typeof studio.uploadAsset>[1]) => studio.uplo
       </div>
       <div v-if="results" class="flex-shrink-0 border-bottom p-3 small" role="status">
         <div v-for="r in results" :key="`${r.kanal}/${r.key}`" :class="r.ok ? 'text-success' : 'text-danger'">
-          {{ r.kanal }}/{{ r.key }}: {{ r.ok ? `terbit${r.dropped.length ? ` (dibuang: ${r.dropped.join(', ')})` : ''}` : `gagal — ${r.error}` }}
+          {{ r.kanal === PAGE_SPACE ? r.key : `${r.key} · lama (${r.kanal})` }}: {{ r.ok ? `terbit${r.dropped.length ? ` (dibuang: ${r.dropped.join(', ')})` : ''}` : `gagal — ${r.error}` }}
         </div>
       </div>
       <SduiTemplateBuilder
