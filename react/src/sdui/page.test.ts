@@ -81,7 +81,7 @@ describe('Konten: a page = a template + what it sets', () => {
   it('a new page starts from a template release with no values', async () => {
     await createPage('wondr', 'insightBaru', 'insight', 1)
     expect(calls[0]!.slice(0, 3)).toEqual(['saveScreen', 'wondr', 'insightBaru'])
-    expect(calls[0]![3]).toEqual({ schemaVersion: '2.6', values: { screen: 'insightBaru', template: { key: 'insight', version: 1 }, components: {} } })
+    expect(calls[0]![3]).toEqual({ schemaVersion: '2.7', values: { screen: 'insightBaru', template: { key: 'insight', version: 1 }, components: {} } })
   })
 })
 

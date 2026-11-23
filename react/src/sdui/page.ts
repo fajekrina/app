@@ -22,10 +22,11 @@ export function templateSource(t: TemplateDetail | null | undefined): Json | und
   return (t?.draft ?? t?.active?.payload ?? undefined) as Json | undefined
 }
 
-// the server sets the key and the version of a template draft itself
+// the server sets the key and the version of a template draft itself; `schemaVersion` is not the
+// design either (a newer minor only adds props, so an unchanged 2.6 template is not released again)
 const design = (doc: unknown): string => {
-  const d = doc as { schemaVersion?: unknown; template?: Json }
-  return sortedJSONStringify({ schemaVersion: d.schemaVersion, template: { ...d.template, key: undefined, version: undefined } } as never)
+  const d = doc as { template?: Json }
+  return sortedJSONStringify({ template: { ...d.template, key: undefined, version: undefined } } as never)
 }
 
 /** save the template's draft (only when the design changed: an unchanged one starts no new version) */
@@ -110,7 +111,9 @@ export function pageBaseline(template: unknown, page: ScreenDetail | null | unde
   return mergePage(t, ValuesDocument.decode(live)).document.toJSON() as Json
 }
 
-const content = (doc: unknown): string => sortedJSONStringify(doc as never)
+/// what a page holds, for "did it change": its values without `schemaVersion` — a newer minor only adds
+/// props (spec 2.7), so a page stored as 2.6 whose values are the same is not saved again
+const content = (doc: unknown): string => sortedJSONStringify({ ...(doc as object), schemaVersion: undefined } as never)
 
 /** the page's values for the edited tree: only what differs from the template (spec 2.6) */
 export function pageValues(key: string, edited: unknown, template: unknown): Json {
