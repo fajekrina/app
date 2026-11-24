@@ -58,6 +58,8 @@ export async function customerLogout(): Promise<void> {
 export const activities = () => call<{ activities: Activity[]; codes: string[] }>('GET', '/bff/activities')
 export const tickActivities = (codes: string[]) => call<{ codes: string[] }>('PUT', '/bff/activities', { codes })
 export const insights = () => call<Insight[]>('GET', '/bff/insights')
+/** delete every 👍 / 👎 this customer gave; the insights then open with no choice */
+export const resetFeedback = () => call<{ deleted: number }>('DELETE', '/bff/feedback')
 
 /** the names the engine may resolve (catalog-service); empty when it cannot be read (fail closed) */
 export async function appCatalog(fetchImpl: typeof fetch = fetch): Promise<AppCatalog> {

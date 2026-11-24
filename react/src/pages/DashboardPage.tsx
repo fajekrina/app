@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { activities as loadActivities, currentCustomer, customerLogout, insights as loadInsights, tickActivities, type Activity, type Customer, type Insight } from '../api/bff'
+import { activities as loadActivities, currentCustomer, customerLogout, insights as loadInsights, resetFeedback, tickActivities, type Activity, type Customer, type Insight } from '../api/bff'
 import { screenPath, PAGE_SPACE } from '../sdui/config'
 
 const VOTE: Record<Insight['vote'], [string, string]> = {
@@ -22,6 +22,7 @@ export default function DashboardPage() {
   const [shown, setShown] = useState<Insight[]>([])
   const [error, setError] = useState<string>()
   const [saving, setSaving] = useState(false)
+  const [notice, setNotice] = useState<string>()
 
   const reload = useCallback(async () => {
     const [a, i] = await Promise.all([loadActivities(), loadInsights()])
@@ -43,6 +44,22 @@ export default function DashboardPage() {
     setSaving(true)
     try {
       await tickActivities(next)
+      await reload()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // demo: forget every vote of this customer (the insights stay; they open with no choice again)
+  const reset = async () => {
+    if (!window.confirm('Hapus semua feedback 👍 / 👎 yang sudah kamu berikan?')) return
+    setSaving(true)
+    setNotice(undefined)
+    try {
+      const { deleted } = await resetFeedback()
+      setNotice(deleted ? `${deleted} feedback dihapus.` : 'Belum ada feedback untuk dihapus.')
       await reload()
     } catch (e) {
       setError((e as Error).message)
@@ -88,7 +105,14 @@ export default function DashboardPage() {
           </ul>
         </section>
         <section className="rounded-2xl bg-white p-5 shadow-sm">
-          <h2 className="mb-3 font-semibold text-slate-900">Insight untukmu</h2>
+          <div className="mb-3 flex items-center gap-3">
+            <h2 className="font-semibold text-slate-900">Insight untukmu</h2>
+            <button onClick={() => void reset()} disabled={saving}
+              className="ml-auto rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40">
+              Reset feedback
+            </button>
+          </div>
+          {notice && <p role="status" className="mb-3 rounded-lg bg-teal-50 p-2 text-sm text-teal-800">{notice}</p>}
           {shown.length === 0
             ? <p className="text-sm text-slate-500">Belum ada insight. Centang aktivitas di atas.</p>
             : (
