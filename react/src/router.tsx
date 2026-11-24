@@ -1,10 +1,11 @@
 import { Navigate, createBrowserRouter, useParams } from 'react-router-dom'
 import ScreenPage, { LegacyScreenRedirect } from './pages/ScreenPage'
+import LoginPage from './pages/LoginPage'
+import DashboardPage from './pages/DashboardPage'
 import StudioLayout from './pages/StudioLayout'
 import StudioLoginPage from './pages/StudioLoginPage'
 import TemplatesPage from './pages/TemplatesPage'
 import PagesPage from './pages/PagesPage'
-import { DEFAULT_MERCHANT, DEFAULT_SCREEN } from './sdui/config'
 
 /** old links (the former content tab, the Screen Builder) → the Konten tab */
 function LegacyScreensRedirect() {
@@ -22,7 +23,10 @@ function LegacyTabRedirect() {
 // `/s/<space>/<page>`). The Studio has two tabs, one editor in both: Template and Konten.
 // Nothing in it belongs to a user.
 export const router = createBrowserRouter([
-  { path: '/', element: <Navigate to={`/s/${DEFAULT_MERCHANT}/${DEFAULT_SCREEN}`} replace /> },
+  // the customer app: its own login (not the Studio's), the dashboard, then the insight pages
+  { path: '/', element: <Navigate to="/dashboard" replace /> },
+  { path: '/login', element: <LoginPage /> },
+  { path: '/dashboard', element: <DashboardPage /> },
   // a published page (no merchant / kanal / user in its address)
   { path: '/s/:screen', element: <LegacyScreenRedirect /> },
   // a page made before 2.6, in its old space

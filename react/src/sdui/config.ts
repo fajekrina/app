@@ -1,7 +1,7 @@
 /**
- * sdui-r allow-lists of this app. Payloads only NAME things — requests, links, images —
- * and this bundle maps the names. A name that is not here fails closed in the engine.
- * (Target: generated from the backend registry, `targets.generated.ts` — HLD Target web §4.2.)
+ * sdui-r names of this app. Payloads only NAME things — requests, links, images. Requests and
+ * links come from the catalog (catalog-service, through web-bff); images are mapped here. A name
+ * that is in neither fails closed in the engine.
  */
 import type { Endpoint } from '@fajekrina/sdui-r/browser'
 
@@ -15,33 +15,25 @@ export const DEFAULT_MERCHANT = 'merchant_demo'
 export const DEFAULT_SCREEN = 'home'
 
 /**
- * Chart data sources (`chart.source`): named data summaries from summary-service (dummy),
- * through web-bff. Each answers `{ title, unit, items: [{ key, label, value }] }` — the shape
- * a chart maps by default, so a maker only picks one. Name → [web-bff path, title].
+ * Requests, chart sources and links are NOT listed here any more: they live in catalog-service
+ * (the database) and reach the engine through `GET /bff/catalog` (`appCatalog`), the Studio
+ * through `GET /studio-bff/names`. Every request goes to `/bff/api/<name>`; web-bff sends it to
+ * the service the catalog names. Images (`ASSETS`) are still this bundle's.
  */
-export const DATA_SOURCES: Record<string, [path: string, title: string]> = {
-  salesSummary: ['/summaries/sales', 'Penjualan tiket per bulan'],
-  cancellationSummary: ['/summaries/cancellations', 'Pembatalan per bulan'],
-  refundSummary: ['/summaries/refunds', 'Refund per bulan'],
-  paymentMethodSummary: ['/summaries/paymentMethods', 'Metode pembayaran'],
-  ticketCategorySummary: ['/summaries/ticketCategories', 'Penjualan per kategori tiket'],
-  // insightV2: also `peak` ({ label, value, amount }) and `note`, read by the page's texts as tokens
-  coffeeSpending: ['/summaries/coffeeSpending', 'Pembelian kopi per bulan (insight)'],
-  // insightV3: a page `load` (not a chart): `nominal` ("15.000.000") and `amount` ("Rp15.000.000")
-  depositMaturity: ['/summaries/depositMaturity', 'Deposito yang baru cair (insight)']
+export interface AppCatalog {
+  /** name → method (`kind`: an `api` a button sends, or a `source` a chart / page load reads) */
+  requests: Record<string, { method: 'GET' | 'POST'; kind?: 'api' | 'source' }>
+  /** `openURL.link` name → https URL */
+  links: Record<string, string>
+  screens: string[]
+  commands: string[]
 }
 
-/** `api.request` names → web-bff endpoints (domain requests and the data summaries) */
-export const ENDPOINTS: Record<string, Endpoint> = {
-  submitCheckout: { method: 'POST', path: '/submitCheckout' },
-  ...Object.fromEntries(Object.entries(DATA_SOURCES).map(([name, [path]]) => [name, { method: 'GET', path } satisfies Endpoint]))
-}
+export const EMPTY_CATALOG: AppCatalog = { requests: {}, links: {}, screens: [], commands: [] }
 
-/** `openURL.link` names → https URLs */
-export const LINKS: Record<string, string> = {
-  privacyPolicy: 'https://example.com/privacy',
-  terms: 'https://example.com/terms',
-  contactSupport: 'https://example.com/contact'
+/** the engine's endpoints: every catalog request at `/bff/api/<name>` with its method */
+export function endpointsOf(catalog: AppCatalog): Record<string, Endpoint> {
+  return Object.fromEntries(Object.entries(catalog.requests).map(([name, r]) => [name, { method: r.method, path: `/${name}` } satisfies Endpoint]))
 }
 
 /** `image.name` → URL */
@@ -70,21 +62,6 @@ export function studioAssetURL(merchantId: string): (name: string) => string {
   return (name) => ASSET_ID.test(name) ? `/studio-bff/merchants/${encodeURIComponent(merchantId)}/assets/${name}` : assetURL(name)
 }
 
-/**
- * names the builders offer (the same allow-lists). `screens` = the templates (set by the Studio
- * pages); `requests` = what an `api` action of a button (or a form) sends; `sources` = what a
- * chart reads. Both stay `ENDPOINTS` names (one engine allow-list), the builder just offers
- * each where it belongs.
- */
-export const CATALOG = {
-  screens: [] as string[],
-  requests: Object.keys(ENDPOINTS).filter((name) => !(name in DATA_SOURCES)),
-  sources: Object.keys(DATA_SOURCES),
-  links: Object.keys(LINKS),
-  commands: [] as string[],
-  assets: Object.keys(ASSETS)
-}
-
 /** a made-up summary for the builder preview of a chart source */
 const sample = (keys: Array<[string, string]>) => ({ items: keys.map(([key, label], i) => ({ key, label, value: [120, 80, 150, 60, 110, 95][i % 6]! })) })
 const MONTHS: Array<[string, string]> = [['jan', 'Januari'], ['feb', 'Februari'], ['mar', 'Maret'], ['apr', 'April'], ['mei', 'Mei'], ['jun', 'Juni']]
@@ -105,6 +82,13 @@ export const SAMPLE_DATA = {
     ],
     peak: { label: 'Apr 2025', value: 1300000, amount: 'Rp1.300.000' },
     note: 'Selama 3 bulan terakhir, pembelian kopi kamu meningkat terus.'
+  },
+  // the demo insights: the customer's earlier vote (a template `load`) and the electricity chart
+  myFeedback: { vote: '' },
+  electricityBill: {
+    items: [['2025-05', 'Mei', 410000], ['2025-06', 'Jun', 395000], ['2025-07', 'Jul', 450000], ['2025-08', 'Agu', 430000], ['2025-09', 'Sep', 470000], ['2025-10', 'Okt', 555000]]
+      .map(([key, label, value]) => ({ key, label, value, amount: `Rp${Number(value).toLocaleString('id-ID')}`, color: '#FDF2D0' })),
+    average: 'Rp452.000', highest: 'Rp555.000', forecast: 'Rp525.000'
   },
   depositMaturity: {
     items: [{ key: 'deposito', label: 'Deposito', value: 15000000 }],

@@ -7,8 +7,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { EditorDocument, SduiTemplateBuilder } from '@fajekrina/sdui-r/builder/react'
-import { PAGE_SPACE, SHARED_KANAL, StudioError, deprecationOf, studio, type PageRow, type TemplateDetail, type TemplateRow } from '../api/studio'
-import { CATALOG, SAMPLE_DATA, studioAssetURL } from '../sdui/config'
+import { PAGE_SPACE, SHARED_KANAL, StudioError, deprecationOf, studio, studioCatalog, type PageRow, type TemplateDetail, type TemplateRow, type StudioNames } from '../api/studio'
+import { ASSETS, SAMPLE_DATA, studioAssetURL } from '../sdui/config'
 import { pagesToUpdate, publishTemplateDraft, saveTemplateDraft, templateSource, updatePages, type PageUpdate, type PageUpdateResult } from '../sdui/page'
 import { Sidebar } from '../components/Sidebar'
 
@@ -28,6 +28,9 @@ export default function TemplatesPage() {
   // K5: after a release, the pages behind it (checked = update)
   const [offer, setOffer] = useState<{ version: number; pages: PageUpdate[]; chosen: Set<string> }>()
   const [results, setResults] = useState<PageUpdateResult[]>()
+  // the names the builder offers: the catalog (database), never typed freely
+  const [names, setNames] = useState<StudioNames>()
+  useEffect(() => { void studio.names().then(setNames).catch((e: Error) => setError(e.message)) }, [])
 
   const reload = useCallback(async () => {
     const [t, p] = await Promise.all([studio.templates(), studio.pages()])
@@ -62,14 +65,13 @@ export default function TemplatesPage() {
     return doc
   }, [key, detail === undefined])   // eslint-disable-line react-hooks/exhaustive-deps
 
-  // a navigate goes to another page: offer every page key;
-  // its replacement, when deprecated, is another template
+  // requests, sources, links and the pages a navigate may open: the catalog;
+  // a template's replacement, when deprecated, is another template
   const catalog = useMemo(() => ({
-    ...CATALOG,
-    screens: [...new Set(pages.map((p) => p.key))].sort(),
+    ...studioCatalog(names, Object.keys(ASSETS)),
     templates: rows.filter((t) => t.activeVersion).map((t) => t.key),
     deprecated: rows.filter((t) => t.deprecated).map((t) => t.key)
-  }), [pages, rows])
+  }), [names, rows])
   const deprecation = useMemo(() => deprecationOf(detail), [detail])
   const usedBy = (k: string) => pages.filter((p) => p.templateKey === k)
 

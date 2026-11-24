@@ -4,13 +4,13 @@
  * Query params seed the screen (`{{seatId}}`). Pages made before 2.6 keep `/s/:space/:screen`;
  * the old `/s/:screen?m=<space>` links redirect there (`LegacyScreenRedirect`).
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { SduiScreen } from '@fajekrina/sdui-r/react'
 import type { SduiEngine, SduiProps } from '@fajekrina/sdui-r'
 import { createSduiEngine } from '../sdui/engine'
 import { DEFAULT_SCREEN, PAGE_SPACE, isMerchantId, screenPath, specScreenKey } from '../sdui/config'
-import { session } from '../api/bff'
+import { currentCustomer, session, type Customer } from '../api/bff'
 
 function toQuery(params: SduiProps): string {
   const qs = new URLSearchParams()
@@ -41,15 +41,34 @@ export default function ScreenPage() {
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine)
   const [error, setError] = useState<string>()
   const valid = isMerchantId(merchant)
+  // the Studio's page space holds the demo insights: a customer must be logged in (the feedback is
+  // theirs); older spaces stay public
+  const needsCustomer = merchant === PAGE_SPACE
+  const [customer, setCustomer] = useState<Customer | null>()
+  // the page on screen, sent with every request (`X-Sdui-Page`)
+  const pageRef = useRef(screen)
+  pageRef.current = specScreenKey(screen)
+
+  useEffect(() => {
+    if (!needsCustomer) { setCustomer(null); return }
+    let alive = true
+    void currentCustomer().then((c) => {
+      if (!alive) return
+      if (!c) navigate(`/login?next=${encodeURIComponent(`${screenPath(merchant, specScreenKey(screen))}${search}`)}`, { replace: true })
+      else setCustomer(c)
+    }).catch((e: Error) => alive && setError(e.message))
+    return () => { alive = false }
+  }, [needsCustomer, merchant, screen, search, navigate])
 
   useEffect(() => {
     let alive = true
     setEngine(undefined)
     setError(undefined)
     if (!valid) return
-    void session().catch(() => undefined)   // guest session + CSRF for api actions
+    if (!needsCustomer) void session().catch(() => undefined)   // guest session + CSRF for api actions
     createSduiEngine({
       merchantId: merchant,
+      page: () => pageRef.current,
       navigate: (key, params) => navigate(`${screenPath(merchant, key)}${toQuery(params)}`),
       onEvent: (e) => { if (e.type === 'connectivity_changed') setOnline(e.online) }
     }).then(async (created) => {
@@ -57,7 +76,7 @@ export default function ScreenPage() {
       if (alive) setEngine(created)
     }).catch((e: Error) => alive && setError(e.message))
     return () => { alive = false }
-  }, [merchant, navigate, valid])
+  }, [merchant, navigate, valid, needsCustomer])
 
   const key = specScreenKey(screen)
   if (key !== screen) return <Navigate replace to={`${screenPath(merchant, key)}${search}`} />
@@ -68,12 +87,14 @@ export default function ScreenPage() {
         <strong className="text-slate-900">sdui-r · React + Tailwind</strong>
         <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600">{merchant === PAGE_SPACE ? screen : `${merchant} / ${screen}`}</span>
         {!online && <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">Anda sedang offline — tampilan terakhir yang terverifikasi</span>}
-        <Link to="/studio" className="ml-auto text-indigo-600 hover:underline">Studio →</Link>
+        {customer && <Link to="/dashboard" className="text-teal-700 hover:underline">← Dashboard</Link>}
+        {customer && <span className="ml-auto text-slate-500">{customer.name}</span>}
+        <Link to="/studio" className={`${customer ? '' : 'ml-auto '}text-indigo-600 hover:underline`}>Studio →</Link>
       </header>
       <main className="mx-auto max-w-5xl">
         {!valid && <p className="p-6 text-red-600">Alamat halaman tidak valid: <code>{merchant}</code></p>}
         {error && <p className="p-6 text-red-600">{error}</p>}
-        {engine ? <SduiScreen key={`${merchant}/${key}`} engine={engine} source={{ key }} seed={seed} /> : valid && !error && <p className="p-6 text-slate-400">Memuat…</p>}
+        {needsCustomer && !customer ? <p className="p-6 text-slate-400">Memuat…</p> : engine ? <SduiScreen key={`${merchant}/${key}`} engine={engine} source={{ key }} seed={seed} /> : valid && !error && <p className="p-6 text-slate-400">Memuat…</p>}
       </main>
     </div>
   )

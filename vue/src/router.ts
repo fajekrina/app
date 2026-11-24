@@ -4,7 +4,9 @@ import StudioLayout from './pages/StudioLayout.vue'
 import StudioLoginPage from './pages/StudioLoginPage.vue'
 import TemplatesPage from './pages/TemplatesPage.vue'
 import PagesPage from './pages/PagesPage.vue'
-import { DEFAULT_MERCHANT, DEFAULT_SCREEN, PAGE_SPACE, screenPath, specScreenKey } from './sdui/config'
+import LoginPage from './pages/LoginPage.vue'
+import DashboardPage from './pages/DashboardPage.vue'
+import { PAGE_SPACE, screenPath, specScreenKey } from './sdui/config'
 
 // HLD Target web §4.3: one generic SDUI route — `/s/<page>` (pages made before 2.6 keep
 // `/s/<space>/<page>`). The Studio has two tabs, one editor in both: Template and Konten.
@@ -12,7 +14,10 @@ import { DEFAULT_MERCHANT, DEFAULT_SCREEN, PAGE_SPACE, screenPath, specScreenKey
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: screenPath(DEFAULT_MERCHANT, DEFAULT_SCREEN) },
+    // the customer app: its own login (not the Studio's), the dashboard, then the insight pages
+    { path: '/', redirect: '/dashboard' },
+    { path: '/login', component: LoginPage },
+    { path: '/dashboard', component: DashboardPage },
     {
       // a page made before 2.6, in its old space
       path: '/s/:merchantId/:screen',

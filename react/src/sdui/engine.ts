@@ -14,14 +14,16 @@ import {
   specManifestLoader, templateScreenProvider, webCryptoEd25519, windowViewport
 } from '@fajekrina/sdui-r/browser'
 import { connectivity } from '@fajekrina/sdui-r/pwa'
-import { API_BASE, DELIVERY_BASE, ENDPOINTS, LINKS, assetURL } from './config'
+import { API_BASE, DELIVERY_BASE, assetURL, endpointsOf } from './config'
 import { SDUI_KEYS } from './keys.generated'
-import { csrfHeaders } from '../api/bff'
+import { appCatalog, csrfHeaders } from '../api/bff'
 
 export interface EngineOptions {
   merchantId: string
   /** the app router: open screen `key` with navigation params */
   navigate: (key: string, params: SduiProps) => void
+  /** the page on screen: sent with every request as `X-Sdui-Page` (feedback is per page) */
+  page?: () => string | undefined
   /** persistent cache tier (default IndexedDB) and its cipher (default AES-GCM, per tab) */
   store?: CacheStore
   cipher?: CacheCipher
@@ -37,6 +39,8 @@ async function verifier() {
 
 export async function createSduiEngine(options: EngineOptions): Promise<SduiEngine> {
   const delivery = { basePath: DELIVERY_BASE, merchantId: options.merchantId, fetchImpl: options.fetchImpl }
+  // requests and links: the catalog (catalog-service, through web-bff); a name not in it fails closed
+  const catalog = await appCatalog(options.fetchImpl)
   return createEngine({
     security: PayloadSecurity.signed(await verifier()),
     screenFactory: templateScreenProvider(delivery),
@@ -46,10 +50,13 @@ export async function createSduiEngine(options: EngineOptions): Promise<SduiEngi
     actionDispatcher: new ActionDispatcher({
       // the page's merchant travels with every request (its chart data summaries are per merchant)
       network: fetchNetworkClient({
-        baseUrl: API_BASE, endpoints: ENDPOINTS, credentials: 'same-origin', fetchImpl: options.fetchImpl,
-        getHeaders: async (o) => ({ ...(await csrfHeaders(o)), 'X-Sdui-Merchant': options.merchantId })
+        baseUrl: API_BASE, endpoints: endpointsOf(catalog), credentials: 'same-origin', fetchImpl: options.fetchImpl,
+        getHeaders: async (o) => {
+          const page = options.page?.()
+          return { ...(await csrfHeaders(o)), 'X-Sdui-Merchant': options.merchantId, ...(page ? { 'X-Sdui-Page': page } : {}) }
+        }
       }),
-      navigator: browserNavigator({ navigate: (screen, params) => options.navigate(screen, params), links: LINKS })
+      navigator: browserNavigator({ navigate: (screen, params) => options.navigate(screen, params), links: catalog.links })
     }),
     connectivity: typeof window === 'undefined' ? undefined : connectivity(),
     assetURL,

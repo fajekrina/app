@@ -13,8 +13,8 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { EditorDocument, SduiTemplateBuilder } from '@fajekrina/sdui-r/builder/vue'
-import { PAGE_SPACE, StudioError, studio, type CatalogEntry, type PageRow, type ScreenDetail } from '../api/studio'
-import { CATALOG, SAMPLE_DATA, screenPath, studioAssetURL } from '../sdui/config'
+import { PAGE_SPACE, StudioError, studio, studioCatalog, type CatalogEntry, type PageRow, type ScreenDetail, type StudioNames } from '../api/studio'
+import { ASSETS, SAMPLE_DATA, screenPath, studioAssetURL } from '../sdui/config'
 import { createPage, pageBaseline, pageSource, publishPage, rebasePage, sampleTexts, savePage } from '../sdui/page'
 import StudioSidebar from '../components/StudioSidebar.vue'
 
@@ -87,8 +87,10 @@ const newer = computed(() => {
   return p && t && t.version > p.templateVersion ? t.version : undefined
 })
 const baseline = computed(() => (template.value && page.value ? pageBaseline(template.value, page.value) : undefined))
-// a navigate goes to another page of the same space
-const catalog = computed(() => ({ ...CATALOG, screens: rows.value.filter((r) => r.kanal === space.value).map((r) => r.key).sort() }))
+// requests, sources, links and the pages a navigate may open: the catalog (database), never typed freely
+const names = ref<StudioNames>()
+studio.names().then((n) => { names.value = n }).catch((e: Error) => { error.value = e.message })
+const catalog = computed(() => studioCatalog(names.value, Object.keys(ASSETS)))
 const previewURL = computed(() => studioAssetURL(space.value))
 const status = computed(() => notice.value ?? (dropped.value.length ? `Dibuang saat terbit (tidak ada lagi di template): ${dropped.value.join(', ')}.` : undefined))
 

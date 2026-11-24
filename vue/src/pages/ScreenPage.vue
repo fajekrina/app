@@ -11,7 +11,7 @@ import { SduiScreen } from '@fajekrina/sdui-r/vue'
 import type { SduiEngine, SduiProps } from '@fajekrina/sdui-r'
 import { createSduiEngine } from '../sdui/engine'
 import { PAGE_SPACE, isMerchantId, screenPath } from '../sdui/config'
-import { session } from '../api/bff'
+import { currentCustomer, session, type Customer } from '../api/bff'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,6 +23,21 @@ const seed = computed(() => Object.fromEntries(Object.entries(route.query).filte
 const engine = shallowRef<SduiEngine>()
 const online = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
 const error = ref<string>()
+// the Studio's page space holds the demo insights: a customer must be logged in (the feedback is
+// theirs); older spaces stay public
+const needsCustomer = computed(() => merchant.value === PAGE_SPACE)
+const customer = ref<Customer | null>()
+
+watch([needsCustomer, () => route.fullPath], async ([needed]) => {
+  if (!needed) { customer.value = null; return }
+  try {
+    const c = await currentCustomer()
+    if (!c) await router.replace({ path: '/login', query: { next: route.fullPath } })
+    else customer.value = c
+  } catch (e) {
+    error.value = (e as Error).message
+  }
+}, { immediate: true })
 
 function query(params: SduiProps): Record<string, string> {
   const q: Record<string, string> = {}
@@ -34,10 +49,12 @@ watch(merchant, async (m) => {
   engine.value = undefined
   error.value = undefined
   if (!isMerchantId(m)) return
-  void session().catch(() => undefined)   // guest session + CSRF for api actions
+  if (m !== PAGE_SPACE) void session().catch(() => undefined)   // guest session + CSRF for api actions
   try {
     const created = await createSduiEngine({
       merchantId: m,
+      // the page on screen, sent with every request (`X-Sdui-Page`)
+      page: () => screen.value,
       navigate: (key, params) => void router.push({ path: screenPath(m, key), query: query(params) }),
       onEvent: (e) => { if (e.type === 'connectivity_changed') online.value = e.online }
     })
@@ -56,12 +73,15 @@ watch(merchant, async (m) => {
       <strong>sdui-r · Vue + Bootstrap</strong>
       <span class="badge text-bg-light font-monospace">{{ merchant === PAGE_SPACE ? screen : `${merchant} / ${screen}` }}</span>
       <span v-if="!online" class="badge text-bg-warning">Anda sedang offline — tampilan terakhir yang terverifikasi</span>
-      <RouterLink to="/studio" class="ms-auto">Studio →</RouterLink>
+      <RouterLink v-if="customer" to="/dashboard">← Dashboard</RouterLink>
+      <span v-if="customer" class="ms-auto text-secondary">{{ customer.name }}</span>
+      <RouterLink to="/studio" :class="{ 'ms-auto': !customer }">Studio →</RouterLink>
     </nav>
     <main class="container" style="max-width: 64rem">
       <p v-if="!valid" class="text-danger p-4">Alamat halaman tidak valid: <code>{{ merchant }}</code></p>
       <p v-if="error" class="text-danger p-4">{{ error }}</p>
-      <SduiScreen v-if="engine" :key="`${merchant}/${screen}`" :engine="engine" :source="{ key: screen }" :seed="seed" />
+      <p v-if="needsCustomer && !customer" class="text-secondary p-4">Memuat…</p>
+      <SduiScreen v-else-if="engine" :key="`${merchant}/${screen}`" :engine="engine" :source="{ key: screen }" :seed="seed" />
       <p v-else-if="valid && !error" class="text-secondary p-4">Memuat…</p>
     </main>
   </div>

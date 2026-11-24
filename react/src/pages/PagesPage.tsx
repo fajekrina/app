@@ -12,8 +12,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { EditorDocument, SduiTemplateBuilder } from '@fajekrina/sdui-r/builder/react'
-import { PAGE_SPACE, StudioError, studio, type CatalogEntry, type PageRow, type ScreenDetail } from '../api/studio'
-import { CATALOG, SAMPLE_DATA, screenPath, studioAssetURL } from '../sdui/config'
+import { PAGE_SPACE, StudioError, studio, studioCatalog, type CatalogEntry, type PageRow, type ScreenDetail, type StudioNames } from '../api/studio'
+import { ASSETS, SAMPLE_DATA, screenPath, studioAssetURL } from '../sdui/config'
 import { createPage, pageBaseline, pageSource, publishPage, rebasePage, sampleTexts, savePage } from '../sdui/page'
 import { Sidebar } from '../components/Sidebar'
 
@@ -37,6 +37,9 @@ export default function PagesPage() {
   const [error, setError] = useState<string>()
   const [notice, setNotice] = useState<string>()
   const [creating, setCreating] = useState<{ template?: string; key: string }>({ key: '' })
+  // the names the builder offers: the catalog (database), never typed freely
+  const [names, setNames] = useState<StudioNames>()
+  useEffect(() => { void studio.names().then(setNames).catch((e: Error) => setError(e.message)) }, [])
 
   const reload = useCallback(async () => {
     const [p, c] = await Promise.all([studio.pages(), studio.catalog(PAGE_SPACE)])
@@ -79,8 +82,8 @@ export default function PagesPage() {
 
   const entryOf = (k: string, s = space) => (s === PAGE_SPACE ? templates : [...spaceTemplates, ...templates]).find((t) => t.key === k)
   const newer = page && entryOf(page.templateKey) && entryOf(page.templateKey)!.version > page.templateVersion ? entryOf(page.templateKey)!.version : undefined
-  // a navigate goes to another page of the same space
-  const catalog = useMemo(() => ({ ...CATALOG, screens: rows.filter((r) => r.kanal === space).map((r) => r.key).sort() }), [rows, space])
+  // requests, sources, links and the pages a navigate may open: the catalog
+  const catalog = useMemo(() => studioCatalog(names, Object.keys(ASSETS)), [names])
   const previewURL = useMemo(() => studioAssetURL(space), [space])
 
   const save = async (payload: unknown) => {

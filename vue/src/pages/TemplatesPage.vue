@@ -8,8 +8,8 @@
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { EditorDocument, SduiTemplateBuilder } from '@fajekrina/sdui-r/builder/vue'
-import { PAGE_SPACE, SHARED_KANAL, StudioError, deprecationOf, studio, type PageRow, type TemplateDetail, type TemplateRow } from '../api/studio'
-import { CATALOG, SAMPLE_DATA, studioAssetURL } from '../sdui/config'
+import { PAGE_SPACE, SHARED_KANAL, StudioError, deprecationOf, studio, studioCatalog, type PageRow, type StudioNames, type TemplateDetail, type TemplateRow } from '../api/studio'
+import { ASSETS, SAMPLE_DATA, studioAssetURL } from '../sdui/config'
 import { pagesToUpdate, publishTemplateDraft, saveTemplateDraft, templateSource, updatePages, type PageUpdate, type PageUpdateResult } from '../sdui/page'
 import StudioSidebar from '../components/StudioSidebar.vue'
 
@@ -37,11 +37,12 @@ async function reload() {
 }
 reload().catch((e: Error) => { error.value = e.message })
 const usedBy = (k: string) => pages.value.filter((p) => p.templateKey === k)
-// a navigate goes to another page: offer every page key; its replacement, when
-// deprecated, is another template
+// requests, sources, links and the pages a navigate may open: the catalog (database), never
+// typed freely; a template's replacement, when deprecated, is another template
+const names = ref<StudioNames>()
+studio.names().then((n) => { names.value = n }).catch((e: Error) => { error.value = e.message })
 const catalog = computed(() => ({
-  ...CATALOG,
-  screens: [...new Set(pages.value.map((p) => p.key))].sort(),
+  ...studioCatalog(names.value, Object.keys(ASSETS)),
   templates: rows.value.filter((t) => t.activeVersion).map((t) => t.key),
   deprecated: rows.value.filter((t) => t.deprecated).map((t) => t.key)
 }))

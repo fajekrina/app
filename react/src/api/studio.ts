@@ -25,6 +25,16 @@ export interface CatalogEntry extends Deprecation { key: string; version: number
 /** an uploaded picture: `name` goes into `image.name` */
 export interface AssetRow { name: string; contentType: string; size: number; source: 'UPLOAD' | 'URL'; sourceUrl?: string; originalName?: string; publishedAt?: string | null }
 
+/** a catalog name the Studio offers */
+export interface CatalogName { name: string; title: string; description?: string }
+export interface StudioNames { requests: CatalogName[]; sources: CatalogName[]; screens: CatalogName[]; links: CatalogName[]; commands: CatalogName[] }
+
+/** the builder's pick lists from the catalog (names only); images stay this bundle's */
+export function studioCatalog(names: StudioNames | undefined, assets: string[]) {
+  const pick = (list: CatalogName[] | undefined) => (list ?? []).map((n) => n.name)
+  return { requests: pick(names?.requests), sources: pick(names?.sources), screens: pick(names?.screens), links: pick(names?.links), commands: pick(names?.commands), assets }
+}
+
 /** the one page space of the Studio: every new page, and the templates' pictures */
 export const PAGE_SPACE = 'sdui'
 /** @deprecated the same space as `PAGE_SPACE` */
@@ -80,6 +90,8 @@ export const studio = {
   },
 
   // ---- the Template tab: shared templates
+  /** the names the Studio offers (catalog-service): requests, sources, screens, links, commands */
+  names: () => call<StudioNames>('GET', '/names'),
   templates: () => call<TemplateRow[]>('GET', '/templates'),
   template: (key: string) => call<TemplateDetail>('GET', `/templates/${key}`),
   saveTemplate: (key: string, payload: unknown, lockVersion?: number) => call<TemplateDetail>('PUT', `/templates/${key}/draft`, { payload, lockVersion }),
