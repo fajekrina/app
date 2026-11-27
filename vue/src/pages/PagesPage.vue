@@ -14,8 +14,9 @@ import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { EditorDocument, SduiTemplateBuilder } from '@fajekrina/sdui-r/builder/vue'
 import { PAGE_SPACE, StudioError, studio, studioCatalog, type CatalogEntry, type PageRow, type ScreenDetail, type StudioNames } from '../api/studio'
-import { ASSETS, SAMPLE_DATA, screenPath, studioAssetURL } from '../sdui/config'
-import { createPage, pageBaseline, pageSource, publishPage, rebasePage, sampleTexts, savePage } from '../sdui/page'
+import { ASSETS, SAMPLE_DATA, screenPath, studioAssetURL, LANGUAGES } from '../sdui/config'
+import { createPage, documentLanguages, pageBaseline, pageSource, publishPage, rebasePage, sampleTexts, savePage } from '../sdui/page'
+import { TemplateDocument } from '@fajekrina/sdui-r'
 import StudioSidebar from '../components/StudioSidebar.vue'
 
 const ID = /^[A-Za-z][A-Za-z0-9_]*$/
@@ -37,6 +38,8 @@ const dropped = ref<string[]>([])
 const error = ref<string>()
 const notice = ref<string>()
 const creating = ref<{ template?: string; key: string }>({ key: '' })
+// the language being edited ('' = the page's default; spec 2.8)
+const language = ref('')
 const notFound = (e: unknown) => { if (e instanceof StudioError && e.status === 404) return null; throw e }
 
 async function reload() {
@@ -52,7 +55,7 @@ watch(space, (s) => {
 
 /** open the page's tree: the template release with the page written in, its key the page's */
 function openDocument(p: ScreenDetail, release: unknown) {
-  const { source, dropped: lost } = pageSource(release, p)
+  const { source, dropped: lost } = pageSource(release, p, language.value)
   ;(source.template as { key: string }).key = key.value!
   const doc = new EditorDocument({ mode: 'template', key: key.value!, locked: true })
   doc.importJSON(source)
@@ -68,6 +71,7 @@ watch([space, key], async ([s, k]) => {
   document.value = undefined
   error.value = undefined
   notice.value = undefined
+  language.value = ''
   if (!k) return
   try {
     const p = await studio.screen(s, k).catch(notFound)
@@ -86,7 +90,17 @@ const newer = computed(() => {
   const t = p ? entryOf(p.templateKey) : undefined
   return p && t && t.version > p.templateVersion ? t.version : undefined
 })
-const baseline = computed(() => (template.value && page.value ? pageBaseline(template.value, page.value) : undefined))
+const baseline = computed(() => (template.value && page.value ? pageBaseline(template.value, page.value, language.value) : undefined))
+// another language: the same page reopened in it
+watch(language, () => { if (page.value && template.value) openDocument(page.value, template.value) })
+const languages = computed(() => {
+  const own = documentLanguages(page.value?.draft ?? page.value?.active?.payload)
+  const all = new Set([...LANGUAGES.map((l) => l.code), ...own.others, ...documentLanguages(template.value).others])
+  all.delete(own.default)
+  return { default: own.default, others: [...all] }
+})
+const labelOf = (code: string) => LANGUAGES.find((l) => l.code === code)?.label ?? code
+const pageTemplate = computed(() => (template.value && language.value ? TemplateDocument.decode(template.value).inLanguage(language.value).toJSON() : template.value))
 // requests, sources, links and the pages a navigate may open: the catalog (database), never typed freely
 const names = ref<StudioNames>()
 studio.names().then((n) => { names.value = n }).catch((e: Error) => { error.value = e.message })
@@ -95,12 +109,12 @@ const previewURL = computed(() => studioAssetURL(space.value))
 const status = computed(() => notice.value ?? (dropped.value.length ? `Dibuang saat terbit (tidak ada lagi di template): ${dropped.value.join(', ')}.` : undefined))
 
 async function save(payload: unknown) {
-  page.value = await savePage(space.value, key.value!, payload, template.value, page.value ?? null)
+  page.value = await savePage(space.value, key.value!, payload, template.value, page.value ?? null, language.value)
   await reload()
 }
 async function publish(payload: unknown) {
   const samples = sampleTexts(payload)
-  const res = await publishPage(space.value, key.value!, payload, template.value, page.value ?? null, (p) => { page.value = p })
+  const res = await publishPage(space.value, key.value!, payload, template.value, page.value ?? null, (p) => { page.value = p }, language.value)
   page.value = res.page
   notice.value = res.unchanged
     ? `Tidak ada perubahan: halaman ${key.value} sudah tayang.`
@@ -167,13 +181,21 @@ const upload = (source: Parameters<typeof studio.uploadAsset>[1]) => studio.uplo
       <div v-if="key && page" class="d-flex flex-shrink-0 flex-wrap align-items-center gap-3 border-bottom bg-light px-3 py-1 small" style="min-height: 2.5rem">
         <span class="font-monospace text-secondary">{{ key }}{{ space === PAGE_SPACE ? '' : ` · lama (${space})` }}</span>
         <span class="text-secondary">template {{ page.templateKey }} v{{ page.templateVersion }}</span>
+        <label class="d-flex align-items-center gap-1 text-secondary">
+          Bahasa
+          <select v-model="language" class="form-select form-select-sm py-0" aria-label="Bahasa yang diedit">
+            <option value="">{{ labelOf(languages.default) }} (utama)</option>
+            <option v-for="code in languages.others" :key="code" :value="code">{{ labelOf(code) }}</option>
+          </select>
+        </label>
+        <span v-if="language" class="text-warning-emphasis">Hanya teks yang berbeda dari {{ labelOf(languages.default) }} yang disimpan untuk {{ labelOf(language) }}.</span>
         <button v-if="newer" class="btn btn-sm btn-info py-0" @click="update">Perbarui ke template v{{ newer }}</button>
         <span v-if="status" class="text-truncate" :class="notice ? 'text-success' : 'text-warning-emphasis'" role="status">{{ status }}</span>
         <a v-if="page.activeSequence" :href="screenPath(space, key)" target="_blank" rel="noreferrer" class="ms-auto">Lihat halaman ↗</a>
       </div>
       <SduiTemplateBuilder
         v-if="key && document"
-        :key="`${space}/${key}/${page?.templateVersion}`"
+        :key="`${space}/${key}/${page?.templateVersion}/${language}`"
         :document="document"
         :title="page?.activeSequence ? `tayang v${page.activeSequence}` : 'belum terbit'"
         :catalog="catalog"
@@ -181,7 +203,7 @@ const upload = (source: Parameters<typeof studio.uploadAsset>[1]) => studio.uplo
         :asset-u-r-l="previewURL"
         :upload-asset="upload"
         :baseline="baseline"
-        :page-template="template as object"
+        :page-template="pageTemplate as object"
         :on-save="save"
         :on-publish="publish"
       />

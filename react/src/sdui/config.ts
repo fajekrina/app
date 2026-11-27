@@ -5,14 +5,36 @@
  */
 import type { Endpoint } from '@fajekrina/sdui-r/browser'
 
-/** delivery-service client API, through web-bff (same origin) */
-export const DELIVERY_BASE = '/bff/sdui'
+/** delivery-service client API, through web-bff (same origin): this app's path of each operation */
+export const DELIVERY_ROUTES = {
+  screen: '/bff/sdui/screens/{space}/{key}',
+  screenRelease: '/bff/sdui/screens/{space}/{key}/v{sequence}',
+  template: '/bff/sdui/templates/{space}/{key}/v{version}',
+  manifest: '/bff/sdui/manifest/{space}'
+}
 /** named domain requests, through web-bff */
 export const API_BASE = '/bff/api'
 
 /** the page `/` opens; the merchant switcher lists every merchant with a published page (`publicMerchants`) */
 export const DEFAULT_MERCHANT = 'merchant_demo'
 export const DEFAULT_SCREEN = 'home'
+
+/** the languages the app offers to switch to (spec 2.8); a page without one shows its default texts */
+export const LANGUAGES: Array<{ code: string; label: string }> = [{ code: 'id', label: 'Bahasa Indonesia' }, { code: 'en', label: 'English' }]
+const LANGUAGE_KEY = 'sdui-r-language'
+
+/** the languages the app asks pages in, most wanted first: the one picked in the app, else the browser's */
+export function appLanguages(): string[] {
+  let picked: string | null = null
+  try { picked = localStorage.getItem(LANGUAGE_KEY) } catch { /* private mode */ }
+  const browser = typeof navigator === 'undefined' ? [] : [...(navigator.languages ?? [navigator.language])]
+  return [...new Set([...(picked ? [picked] : []), ...browser].filter(Boolean))]
+}
+
+/** pick the app's language (remembered in this browser) */
+export function setAppLanguage(code: string): void {
+  try { localStorage.setItem(LANGUAGE_KEY, code) } catch { /* private mode */ }
+}
 
 /**
  * Requests, chart sources and links are NOT listed here any more: they live in catalog-service

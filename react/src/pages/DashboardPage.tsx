@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { activities as loadActivities, currentCustomer, customerLogout, insights as loadInsights, resetFeedback, tickActivities, type Activity, type Customer, type Insight } from '../api/bff'
-import { screenPath, PAGE_SPACE } from '../sdui/config'
+import { LANGUAGES, appLanguages, screenPath, setAppLanguage, PAGE_SPACE } from '../sdui/config'
 
 const VOTE: Record<Insight['vote'], [string, string]> = {
   like: ['👍 Kamu suka', 'bg-green-100 text-green-800'],
@@ -23,6 +23,8 @@ export default function DashboardPage() {
   const [error, setError] = useState<string>()
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState<string>()
+  // the language insight pages open in (spec 2.8; a page without it shows its default texts)
+  const [language, setLanguage] = useState(() => LANGUAGES.find((l) => appLanguages().some((w) => w.split('-')[0] === l.code))?.code ?? 'id')
 
   const reload = useCallback(async () => {
     const [a, i] = await Promise.all([loadActivities(), loadInsights()])
@@ -82,7 +84,10 @@ export default function DashboardPage() {
             <p className="text-sm text-slate-600">Halo,</p>
             <h1 className="text-xl font-bold text-slate-900">{me.name}</h1>
           </div>
-          <button onClick={logout} className="ml-auto rounded-full bg-white px-4 py-1 text-sm text-slate-700 shadow-sm hover:bg-slate-50">Keluar</button>
+          <select aria-label="Bahasa" value={language} onChange={(e) => { setAppLanguage(e.target.value); setLanguage(e.target.value) }} className="ml-auto rounded-full bg-white px-3 py-1 text-sm text-slate-700 shadow-sm">
+            {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+          </select>
+          <button onClick={logout} className="rounded-full bg-white px-4 py-1 text-sm text-slate-700 shadow-sm hover:bg-slate-50">Keluar</button>
         </div>
       </header>
       <main className="mx-auto -mt-4 max-w-3xl space-y-6 px-4 pb-10">

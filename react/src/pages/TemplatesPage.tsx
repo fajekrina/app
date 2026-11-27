@@ -8,8 +8,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { EditorDocument, SduiTemplateBuilder } from '@fajekrina/sdui-r/builder/react'
 import { PAGE_SPACE, SHARED_KANAL, StudioError, deprecationOf, studio, studioCatalog, type PageRow, type TemplateDetail, type TemplateRow, type StudioNames } from '../api/studio'
-import { ASSETS, SAMPLE_DATA, studioAssetURL } from '../sdui/config'
-import { pagesToUpdate, publishTemplateDraft, saveTemplateDraft, templateSource, updatePages, type PageUpdate, type PageUpdateResult } from '../sdui/page'
+import { ASSETS, SAMPLE_DATA, studioAssetURL, LANGUAGES } from '../sdui/config'
+import { documentLanguages, pagesToUpdate, publishTemplateDraft, saveTemplateDraft, templateSource, updatePages, type PageUpdate, type PageUpdateResult } from '../sdui/page'
 import { Sidebar } from '../components/Sidebar'
 
 const notFound = (e: unknown) => { if (e instanceof StudioError && e.status === 404) return null; throw e }
@@ -25,6 +25,8 @@ export default function TemplatesPage() {
   const [error, setError] = useState<string>()
   const [notice, setNotice] = useState<string>()
   const [newKey, setNewKey] = useState('')
+  // the language being edited ('' = the template's default; another one locks the structure)
+  const [language, setLanguage] = useState('')
   // K5: after a release, the pages behind it (checked = update)
   const [offer, setOffer] = useState<{ version: number; pages: PageUpdate[]; chosen: Set<string> }>()
   const [results, setResults] = useState<PageUpdateResult[]>()
@@ -46,6 +48,7 @@ export default function TemplatesPage() {
     setNotice(undefined)
     setOffer(undefined)
     setResults(undefined)
+    setLanguage('')
     if (!key) return
     let live = true
     void (async () => {
@@ -58,12 +61,19 @@ export default function TemplatesPage() {
 
   const document = useMemo(() => {
     if (!key || detail === undefined) return undefined
-    const doc = new EditorDocument({ mode: 'template', key })
+    const doc = new EditorDocument({ mode: 'template', key, locked: language !== '' })
     for (const t of released.current) doc.reserveIds(t as object)
-    const source = templateSource(detail)
+    const source = templateSource(detail, language)
     if (source) doc.importJSON(source)
     return doc
-  }, [key, detail === undefined])   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, detail === undefined, language])   // eslint-disable-line react-hooks/exhaustive-deps
+  const languages = useMemo(() => {
+    const own = documentLanguages(detail?.draft ?? detail?.active?.payload)
+    const all = new Set([...LANGUAGES.map((l) => l.code), ...own.others])
+    all.delete(own.default)
+    return { default: own.default, others: [...all] }
+  }, [detail?.draft, detail?.active])
+  const labelOf = (code: string) => LANGUAGES.find((l) => l.code === code)?.label ?? code
 
   // requests, sources, links and the pages a navigate may open: the catalog;
   // a template's replacement, when deprecated, is another template
@@ -76,11 +86,11 @@ export default function TemplatesPage() {
   const usedBy = (k: string) => pages.filter((p) => p.templateKey === k)
 
   const save = async (payload: unknown) => {
-    setDetail(await saveTemplateDraft(key!, payload, detail ?? null))
+    setDetail(await saveTemplateDraft(key!, payload, detail ?? null, language))
     await reload()
   }
   const publish = async (payload: unknown) => {
-    const { template, unchanged } = await publishTemplateDraft(key!, payload, detail ?? null, setDetail)
+    const { template, unchanged } = await publishTemplateDraft(key!, payload, detail ?? null, setDetail, language)
     setDetail(template)
     await reload()
     if (unchanged) { setNotice(`Tidak ada perubahan: template ${key} v${template.activeVersion} sudah aktif.`); return }
@@ -171,9 +181,21 @@ export default function TemplatesPage() {
             ))}
           </div>
         )}
+        {key && detail && (
+          <div className="flex min-h-10 flex-none flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50 px-3 py-1 text-xs">
+            <label className="flex items-center gap-1 text-slate-600">
+              Bahasa
+              <select className="rounded border border-slate-300 bg-white px-1 py-0.5" aria-label="Bahasa yang diedit" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                <option value="">{labelOf(languages.default)} (utama)</option>
+                {languages.others.map((code) => <option key={code} value={code}>{labelOf(code)}</option>)}
+              </select>
+            </label>
+            {language && <span className="text-amber-700">Struktur terkunci: hanya teks dan tampilan untuk {labelOf(language)}; yang berbeda dari {labelOf(languages.default)} disimpan.</span>}
+          </div>
+        )}
         {key && document && (
           <SduiTemplateBuilder
-            key={key}
+            key={`${key}/${language}`}
             document={document}
             title={detail?.activeVersion ? `aktif v${detail.activeVersion}` : 'belum terbit'}
             catalog={catalog}

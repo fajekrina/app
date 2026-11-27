@@ -25,7 +25,7 @@ vi.mock('../api/studio', () => ({
   }
 }))
 
-const { createPage, pageBaseline, pageSource, pageValues, pagesToUpdate, publishPage, publishTemplateDraft, sampleTexts, savePage, updatePages } = await import('./page')
+const { createPage, documentLanguages, pageBaseline, pageSource, pageValues, pagesToUpdate, publishPage, publishTemplateDraft, sampleTexts, savePage, templatePayload, updatePages } = await import('./page')
 
 // a shared template (with its sample texts) and a page's values (2.6: what differs)
 const TEMPLATE = {
@@ -81,7 +81,7 @@ describe('Konten: a page = a template + what it sets', () => {
   it('a new page starts from a template release with no values', async () => {
     await createPage('wondr', 'insightBaru', 'insight', 1)
     expect(calls[0]!.slice(0, 3)).toEqual(['saveScreen', 'wondr', 'insightBaru'])
-    expect(calls[0]![3]).toEqual({ schemaVersion: '2.7', values: { screen: 'insightBaru', template: { key: 'insight', version: 1 }, components: {} } })
+    expect(calls[0]![3]).toEqual({ schemaVersion: '2.8', values: { screen: 'insightBaru', template: { key: 'insight', version: 1 }, components: {} } })
   })
 })
 
@@ -105,5 +105,32 @@ describe('Template: release, then the pages made from it', () => {
       { kanal: 'wondr', key: 'insightKopi', ok: true, dropped: ['gone'] },
       { kanal: 'wondr', key: 'broken', ok: false, dropped: [], error: 'nope' }
     ])
+  })
+})
+
+describe('languages (spec 2.8): one language at a time', () => {
+  it('Konten in English stores only what differs from the default texts; the default keeps the languages', () => {
+    const en = structuredClone(pageSource(TEMPLATE, page(), 'en').source) as unknown as Doc
+    en.template.root.children[0]!.props.value = 'Coffee this month'
+    const values = pageValues('insightKopi', en, TEMPLATE, page(), 'en') as { values: { components: object; locales: Record<string, unknown> } }
+    expect(values.values.components).toEqual(VALUES.values.components)
+    expect(values.values.locales).toEqual({ en: { components: { title: { props: { value: 'Coffee this month' } } } } })
+    // the page opened again in English shows it; saving the default texts keeps it
+    const withEn = { ...(page() as object), draft: values } as never
+    expect((pageSource(TEMPLATE, withEn, 'en').source as unknown as Doc).template.root.children[0]!.props.value).toBe('Coffee this month')
+    const def = pageValues('insightKopi', pageSource(TEMPLATE, withEn).source, TEMPLATE, withEn) as { values: { locales?: unknown } }
+    expect(def.values.locales).toEqual(values.values.locales)
+    expect(documentLanguages(values)).toEqual({ default: 'id', others: ['en'] })
+  })
+
+  it('the Template tab in English stores what differs; the default keeps the languages', () => {
+    const detail = { key: 'insight', draft: TEMPLATE, lockVersion: 1 } as never
+    const en = structuredClone(TEMPLATE) as unknown as Doc
+    en.template.root.children[1]!.props.title = '[See more]'
+    const out = templatePayload(en, detail, 'en') as { template: { locales: object; root: Doc['template']['root'] } }
+    expect(out.template.locales).toEqual({ en: { components: { cta: { props: { title: '[See more]' } } } } })
+    expect(out.template.root.children[1]!.props.title).toBe('[CTA Text]')
+    const kept = templatePayload(TEMPLATE, { ...(detail as object), draft: out } as never) as { template: { locales: object } }
+    expect(kept.template.locales).toEqual(out.template.locales)
   })
 })

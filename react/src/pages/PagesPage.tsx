@@ -8,13 +8,18 @@
  *
  * New pages live in the Studio's one space (`PAGE_SPACE`); pages made before it keep their old
  * space (shown as "lama · <space>") and their old address.
+ *
+ * Bahasa (spec 2.8): the page is edited one language at a time; in another language than the
+ * default only what differs from the default texts is stored. The app shows each page in the
+ * customer's language, else in the default.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { EditorDocument, SduiTemplateBuilder } from '@fajekrina/sdui-r/builder/react'
+import { TemplateDocument } from '@fajekrina/sdui-r'
 import { PAGE_SPACE, StudioError, studio, studioCatalog, type CatalogEntry, type PageRow, type ScreenDetail, type StudioNames } from '../api/studio'
-import { ASSETS, SAMPLE_DATA, screenPath, studioAssetURL } from '../sdui/config'
-import { createPage, pageBaseline, pageSource, publishPage, rebasePage, sampleTexts, savePage } from '../sdui/page'
+import { ASSETS, LANGUAGES, SAMPLE_DATA, screenPath, studioAssetURL } from '../sdui/config'
+import { createPage, documentLanguages, pageBaseline, pageSource, publishPage, rebasePage, sampleTexts, savePage } from '../sdui/page'
 import { Sidebar } from '../components/Sidebar'
 
 const ID = /^[A-Za-z][A-Za-z0-9_]*$/
@@ -37,6 +42,8 @@ export default function PagesPage() {
   const [error, setError] = useState<string>()
   const [notice, setNotice] = useState<string>()
   const [creating, setCreating] = useState<{ template?: string; key: string }>({ key: '' })
+  // the language being edited ('' = the page's default)
+  const [language, setLanguage] = useState('')
   // the names the builder offers: the catalog (database), never typed freely
   const [names, setNames] = useState<StudioNames>()
   useEffect(() => { void studio.names().then(setNames).catch((e: Error) => setError(e.message)) }, [])
@@ -57,6 +64,7 @@ export default function PagesPage() {
     setTemplate(undefined)
     setError(undefined)
     setNotice(undefined)
+    setLanguage('')
     if (!key) return
     let live = true
     void (async () => {
@@ -72,13 +80,23 @@ export default function PagesPage() {
   // one locked document per opened page; its key is the page's
   const opened = useMemo(() => {
     if (!key || !page || !template) return undefined
-    const { source, dropped } = pageSource(template, page)
+    const { source, dropped } = pageSource(template, page, language)
     ;(source.template as { key: string }).key = key
     const doc = new EditorDocument({ mode: 'template', key, locked: true })
     doc.importJSON(source)
     return { doc, dropped }
-  }, [key, page?.templateVersion, template])   // eslint-disable-line react-hooks/exhaustive-deps
-  const baseline = useMemo(() => (template && page ? pageBaseline(template, page) : undefined), [template, page?.active])   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, page?.templateVersion, template, language])   // eslint-disable-line react-hooks/exhaustive-deps
+  const baseline = useMemo(() => (template && page ? pageBaseline(template, page, language) : undefined), [template, page?.active, language])   // eslint-disable-line react-hooks/exhaustive-deps
+  // the page's default language and the ones it (or its template) has texts for
+  const languages = useMemo(() => {
+    const own = documentLanguages(page?.draft ?? page?.active?.payload)
+    const fromTemplate = documentLanguages(template)
+    const all = new Set([...LANGUAGES.map((l) => l.code), ...own.others, ...fromTemplate.others])
+    all.delete(own.default)
+    return { default: own.default, others: [...all] }
+  }, [page?.draft, page?.active, template])
+  const labelOf = (code: string) => LANGUAGES.find((l) => l.code === code)?.label ?? code
+  const pageTemplate = useMemo(() => (template && language ? TemplateDocument.decode(template).inLanguage(language).toJSON() : template), [template, language])
 
   const entryOf = (k: string, s = space) => (s === PAGE_SPACE ? templates : [...spaceTemplates, ...templates]).find((t) => t.key === k)
   const newer = page && entryOf(page.templateKey) && entryOf(page.templateKey)!.version > page.templateVersion ? entryOf(page.templateKey)!.version : undefined
@@ -87,12 +105,12 @@ export default function PagesPage() {
   const previewURL = useMemo(() => studioAssetURL(space), [space])
 
   const save = async (payload: unknown) => {
-    setPage(await savePage(space, key!, payload, template, page ?? null))
+    setPage(await savePage(space, key!, payload, template, page ?? null, language))
     await reload()
   }
   const publish = async (payload: unknown) => {
     const samples = sampleTexts(payload)
-    const res = await publishPage(space, key!, payload, template, page ?? null, setPage)
+    const res = await publishPage(space, key!, payload, template, page ?? null, setPage, language)
     setPage(res.page)
     setNotice(res.unchanged
       ? `Tidak ada perubahan: halaman ${key} sudah tayang.`
@@ -167,6 +185,14 @@ export default function PagesPage() {
           <div className="flex min-h-10 flex-none flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50 px-3 py-1 text-xs">
             <span className="font-mono text-slate-600">{key}{space === PAGE_SPACE ? '' : ` · lama (${space})`}</span>
             <span className="text-slate-500">template {page.templateKey} v{page.templateVersion}</span>
+            <label className="flex items-center gap-1 text-slate-600">
+              Bahasa
+              <select className="rounded border border-slate-300 bg-white px-1 py-0.5" aria-label="Bahasa yang diedit" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                <option value="">{labelOf(languages.default)} (utama)</option>
+                {languages.others.map((code) => <option key={code} value={code}>{labelOf(code)}</option>)}
+              </select>
+            </label>
+            {language && <span className="text-amber-700">Hanya teks yang berbeda dari {labelOf(languages.default)} yang disimpan untuk {labelOf(language)}.</span>}
             {newer && <button className="rounded bg-sky-600 px-2 py-0.5 text-white" onClick={() => void update().catch((e: Error) => setError(e.message))}>Perbarui ke template v{newer}</button>}
             {(notice ?? (opened?.dropped.length ? 'x' : undefined)) &&
               <span className={`truncate ${notice ? 'text-emerald-700' : 'text-amber-700'}`} role="status">{notice ?? `Dibuang saat terbit (tidak ada lagi di template): ${opened!.dropped.join(', ')}.`}</span>}
@@ -175,7 +201,7 @@ export default function PagesPage() {
         )}
         {key && opened && (
           <SduiTemplateBuilder
-            key={`${space}/${key}/${page?.templateVersion}`}
+            key={`${space}/${key}/${page?.templateVersion}/${language}`}
             document={opened.doc}
             title={page?.activeSequence ? `tayang v${page.activeSequence}` : 'belum terbit'}
             catalog={catalog}
@@ -183,7 +209,7 @@ export default function PagesPage() {
             assetURL={previewURL}
             uploadAsset={(source) => studio.uploadAsset(space, source)}
             baseline={baseline}
-            pageTemplate={template as object}
+            pageTemplate={pageTemplate as object}
             onSave={save}
             onPublish={publish}
           />

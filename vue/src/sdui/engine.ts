@@ -11,10 +11,10 @@ import {
 import { MESSAGES_ID } from '@fajekrina/sdui-r/i18n'
 import {
   aesGcmCipher, browserNavigator, fetchNetworkClient, generateAesKey, indexedDbStore,
-  specManifestLoader, templateScreenProvider, webCryptoEd25519, windowViewport
+  acceptLanguage, specManifestLoader, templateScreenProvider, webCryptoEd25519, windowViewport
 } from '@fajekrina/sdui-r/browser'
 import { connectivity } from '@fajekrina/sdui-r/pwa'
-import { API_BASE, DELIVERY_BASE, assetURL, endpointsOf } from './config'
+import { API_BASE, DELIVERY_ROUTES, appLanguages, assetURL, endpointsOf } from './config'
 import { SDUI_KEYS } from './keys.generated'
 import { appCatalog, csrfHeaders } from '../api/bff'
 
@@ -29,6 +29,8 @@ export interface EngineOptions {
   cipher?: CacheCipher
   fetchImpl?: typeof fetch
   onEvent?: (event: SduiEvent) => void
+  /** the languages pages are asked in, most wanted first (spec 2.8; default: `appLanguages`) */
+  languages?: () => readonly string[]
 }
 
 /// The public keys are pinned in the bundle (`npm run gen:keys`), never fetched at run time.
@@ -38,7 +40,9 @@ async function verifier() {
 }
 
 export async function createSduiEngine(options: EngineOptions): Promise<SduiEngine> {
-  const delivery = { basePath: DELIVERY_BASE, merchantId: options.merchantId, fetchImpl: options.fetchImpl }
+  const languages = options.languages ?? appLanguages
+  // spec 2.8: delivery answers each page in the first of these it has (`Accept-Language`)
+  const delivery = { routes: DELIVERY_ROUTES, merchantId: options.merchantId, fetchImpl: options.fetchImpl, languages }
   // requests and links: the catalog (catalog-service, through web-bff); a name not in it fails closed
   const catalog = await appCatalog(options.fetchImpl)
   return createEngine({
@@ -53,7 +57,8 @@ export async function createSduiEngine(options: EngineOptions): Promise<SduiEngi
         baseUrl: API_BASE, endpoints: endpointsOf(catalog), credentials: 'same-origin', fetchImpl: options.fetchImpl,
         getHeaders: async (o) => {
           const page = options.page?.()
-          return { ...(await csrfHeaders(o)), 'X-Sdui-Merchant': options.merchantId, ...(page ? { 'X-Sdui-Page': page } : {}) }
+          const language = acceptLanguage(languages())
+          return { ...(await csrfHeaders(o)), 'X-Sdui-Merchant': options.merchantId, ...(page ? { 'X-Sdui-Page': page } : {}), ...(language ? { 'Accept-Language': language } : {}) }
         }
       }),
       navigator: browserNavigator({ navigate: (screen, params) => options.navigate(screen, params), links: catalog.links })
@@ -61,6 +66,7 @@ export async function createSduiEngine(options: EngineOptions): Promise<SduiEngi
     connectivity: typeof window === 'undefined' ? undefined : connectivity(),
     assetURL,
     messages: MESSAGES_ID,
+    languages,
     viewport: typeof window === 'undefined' ? undefined : windowViewport(),
     onEvent: options.onEvent,
     debug: import.meta.env.DEV

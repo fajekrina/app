@@ -2,3 +2,7 @@ node_modules/
 dist/
 *.log
 *.tsbuildinfo
+docs/
+
+# IDE
+.idea/

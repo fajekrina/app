@@ -9,8 +9,8 @@ import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { EditorDocument, SduiTemplateBuilder } from '@fajekrina/sdui-r/builder/vue'
 import { PAGE_SPACE, SHARED_KANAL, StudioError, deprecationOf, studio, studioCatalog, type PageRow, type StudioNames, type TemplateDetail, type TemplateRow } from '../api/studio'
-import { ASSETS, SAMPLE_DATA, studioAssetURL } from '../sdui/config'
-import { pagesToUpdate, publishTemplateDraft, saveTemplateDraft, templateSource, updatePages, type PageUpdate, type PageUpdateResult } from '../sdui/page'
+import { ASSETS, LANGUAGES, SAMPLE_DATA, studioAssetURL } from '../sdui/config'
+import { documentLanguages, pagesToUpdate, publishTemplateDraft, saveTemplateDraft, templateSource, updatePages, type PageUpdate, type PageUpdateResult } from '../sdui/page'
 import StudioSidebar from '../components/StudioSidebar.vue'
 
 const route = useRoute()
@@ -22,6 +22,10 @@ const pages = ref<PageRow[]>([])
 const detail = ref<TemplateDetail | null>()
 const document = shallowRef<EditorDocument>()
 const newKey = ref('')
+// the language being edited ('' = the template's default; another one locks the structure; spec 2.8)
+const language = ref('')
+// every released version of the open template: their component ids are never generated again
+let released: unknown[] = []
 const error = ref<string>()
 const notice = ref<string>()
 // K5: after a release, the pages behind it (checked = update)
@@ -54,29 +58,43 @@ watch(key, async (k) => {
   notice.value = undefined
   offer.value = undefined
   results.value = undefined
+  language.value = ''
   if (!k) return
   try {
     const d = await studio.template(k).catch(notFound)
-    // every released version: their component ids are never generated again
-    const released = d ? await studio.releasedTemplates(k, d.releases.map((x) => x.version)) : []
+    const r = d ? await studio.releasedTemplates(k, d.releases.map((x) => x.version)) : []
     if (k !== key.value) return
-    const doc = new EditorDocument({ mode: 'template', key: k })
-    for (const t of released) doc.reserveIds(t as object)
-    const source = templateSource(d)
-    if (source) doc.importJSON(source)
+    released = r
     detail.value = d
-    document.value = doc
+    openDocument(k, d)
   } catch (e) {
     if (k === key.value) error.value = (e as Error).message
   }
 }, { immediate: true })
 
+/** the template's tree in the edited language (another than the default: structure locked) */
+function openDocument(k: string, d: TemplateDetail | null) {
+  const doc = new EditorDocument({ mode: 'template', key: k, locked: language.value !== '' })
+  for (const t of released) doc.reserveIds(t as object)
+  const source = templateSource(d, language.value)
+  if (source) doc.importJSON(source)
+  document.value = doc
+}
+watch(language, () => { if (key.value && detail.value !== undefined) openDocument(key.value, detail.value) })
+const languages = computed(() => {
+  const own = documentLanguages(detail.value?.draft ?? detail.value?.active?.payload)
+  const all = new Set([...LANGUAGES.map((l) => l.code), ...own.others])
+  all.delete(own.default)
+  return { default: own.default, others: [...all] }
+})
+const labelOf = (code: string) => LANGUAGES.find((l) => l.code === code)?.label ?? code
+
 async function save(payload: unknown) {
-  detail.value = await saveTemplateDraft(key.value!, payload, detail.value ?? null)
+  detail.value = await saveTemplateDraft(key.value!, payload, detail.value ?? null, language.value)
   await reload()
 }
 async function publish(payload: unknown) {
-  const { template, unchanged } = await publishTemplateDraft(key.value!, payload, detail.value ?? null, (t) => { detail.value = t })
+  const { template, unchanged } = await publishTemplateDraft(key.value!, payload, detail.value ?? null, (t) => { detail.value = t }, language.value)
   detail.value = template
   await reload()
   if (unchanged) { notice.value = `Tidak ada perubahan: template ${key.value} v${template.activeVersion} sudah aktif.`; return }
@@ -159,9 +177,19 @@ const upload = (source: Parameters<typeof studio.uploadAsset>[1]) => studio.uplo
           {{ r.kanal === PAGE_SPACE ? r.key : `${r.key} · lama (${r.kanal})` }}: {{ r.ok ? `terbit${r.dropped.length ? ` (dibuang: ${r.dropped.join(', ')})` : ''}` : `gagal — ${r.error}` }}
         </div>
       </div>
+      <div v-if="key && detail" class="d-flex flex-shrink-0 flex-wrap align-items-center gap-3 border-bottom bg-light px-3 py-1 small" style="min-height: 2.5rem">
+        <label class="d-flex align-items-center gap-1 text-secondary">
+          Bahasa
+          <select v-model="language" class="form-select form-select-sm py-0" aria-label="Bahasa yang diedit">
+            <option value="">{{ labelOf(languages.default) }} (utama)</option>
+            <option v-for="code in languages.others" :key="code" :value="code">{{ labelOf(code) }}</option>
+          </select>
+        </label>
+        <span v-if="language" class="text-warning-emphasis">Struktur terkunci: hanya teks dan tampilan untuk {{ labelOf(language) }}; yang berbeda dari {{ labelOf(languages.default) }} disimpan.</span>
+      </div>
       <SduiTemplateBuilder
         v-if="key && document"
-        :key="key"
+        :key="`${key}/${language}`"
         :document="document"
         :title="detail?.activeVersion ? `aktif v${detail.activeVersion}` : 'belum terbit'"
         :catalog="catalog"

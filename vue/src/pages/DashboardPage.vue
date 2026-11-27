@@ -7,7 +7,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { activities as loadActivities, currentCustomer, customerLogout, insights as loadInsights, resetFeedback, tickActivities, type Activity, type Customer, type Insight } from '../api/bff'
-import { PAGE_SPACE, screenPath } from '../sdui/config'
+import { LANGUAGES, PAGE_SPACE, appLanguages, screenPath, setAppLanguage } from '../sdui/config'
 
 const VOTE: Record<Insight['vote'], [string, string]> = {
   like: ['👍 Kamu suka', 'text-bg-success'],
@@ -23,6 +23,9 @@ const shown = ref<Insight[]>([])
 const error = ref<string>()
 const saving = ref(false)
 const notice = ref<string>()
+// the language insight pages open in (spec 2.8; a page without it shows its default texts)
+const language = ref(LANGUAGES.find((l) => appLanguages().some((w) => w.split('-')[0] === l.code))?.code ?? 'id')
+function pickLanguage(code: string) { setAppLanguage(code); language.value = code }
 
 async function reload() {
   const [a, i] = await Promise.all([loadActivities(), loadInsights()])
@@ -81,7 +84,10 @@ async function logout() {
           <div class="small text-secondary">Halo,</div>
           <h1 class="h4 fw-bold mb-0">{{ me.name }}</h1>
         </div>
-        <button class="btn btn-light btn-sm rounded-pill ms-auto" @click="logout">Keluar</button>
+        <select aria-label="Bahasa" class="form-select form-select-sm rounded-pill w-auto ms-auto" :value="language" @change="pickLanguage(($event.target as HTMLSelectElement).value)">
+          <option v-for="l in LANGUAGES" :key="l.code" :value="l.code">{{ l.label }}</option>
+        </select>
+        <button class="btn btn-light btn-sm rounded-pill" @click="logout">Keluar</button>
       </div>
     </header>
     <main class="container pb-5" style="max-width: 48rem; margin-top: -1.5rem">
